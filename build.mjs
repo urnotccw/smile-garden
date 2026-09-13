@@ -7,12 +7,20 @@ if(out!==path.join(root,'dist')||!fs.existsSync(path.join(root,'index.html')))th
 // Only the verified generated dist directory can be replaced.
 fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(path.join(out,'assets'),{recursive:true});
 const names=new Map();
+// Pages and embedded browsers can cache JS after a deployment. Version the
+// entire small module graph together; large pinned models retain their cache.
+const scripts=fs.readdirSync(root).filter(n=>n.endsWith('.js')).sort();
+const release=createHash('sha256');
+for(const name of scripts)release.update(name).update(fs.readFileSync(path.join(root,name)));
+const moduleVersion=release.digest('hex').slice(0,12);
 for(const name of fs.readdirSync(path.join(root,'assets')).filter(n=>n.endsWith('.webp'))){
  const bytes=fs.readFileSync(path.join(root,'assets',name)),hash=createHash('sha256').update(bytes).digest('hex').slice(0,12),hashed=name.replace('.webp',`.${hash}.webp`);
  names.set(name,hashed);fs.writeFileSync(path.join(out,'assets',hashed),bytes);
 }
 for(const name of fs.readdirSync(root).filter(n=>/\.(html|css|js)$/.test(n))){
  let source=fs.readFileSync(path.join(root,name),'utf8');for(const [from,to] of names)source=source.replaceAll(from,to);
+ for(const script of scripts)for(const quote of ['"',"'"])
+  source=source.replaceAll(`${quote}./${script}${quote}`,`${quote}./${script}?v=${moduleVersion}${quote}`);
  fs.writeFileSync(path.join(out,name),source);
 }
 fs.cpSync(path.join(root,'vendor'),path.join(out,'vendor'),{recursive:true});
