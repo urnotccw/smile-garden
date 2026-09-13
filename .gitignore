@@ -1,0 +1,9 @@
+node_modules/
+test-results/
+dist/
+*.zip
+*.log
+.env*
+.DS_Store
+assets/*.png
+.openai/execution-profile.json

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#edf1e8" />
+    <meta name="description" content="微笑，让一场雨长成花园。实时摄像头互动特效。" />
+    <title>微笑花园 · 摄像头互动工作室</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <symbol id="i-leaf" viewBox="0 0 24 24">
+          <path d="M20 4C8 2 3 7 5 14c2 7 14 6 15-10Z" />
+          <path d="M4 21 16 9M10 15v-5m0 5h5" />
+        </symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24">
+          <path d="M8 5 6 8H3v12h18V8h-3l-2-3Z" />
+          <circle cx="12" cy="13" r="4" />
+        </symbol>
+        <symbol id="i-rain" viewBox="0 0 24 24">
+          <path
+            d="M5 3 4 10m8-9-1 8m9-5-1 8M5 13c-5 6 2 7 0 0Zm8-2c-5 6 2 7 0 0Zm6 5c-5 6 2 7 0 0Z"
+          />
+        </symbol>
+        <symbol id="i-expand" viewBox="0 0 24 24">
+          <path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6" />
+        </symbol>
+        <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 1 7M3 3v7h7" /></symbol>
+        <symbol id="i-flip" viewBox="0 0 24 24">
+          <path d="M4 8a9 9 0 0 1 15-3l2 3M21 2v6h-6M20 16a9 9 0 0 1-15 3l-2-3m0 6v-6h6" />
+        </symbol>
+        <symbol id="i-smile" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M8 14c1 4 7 4 8 0M8 8v2m8-2v2" />
+        </symbol>
+      </defs>
+    </svg>
+    <div class="app-shell">
+      <main>
+        <section class="studio" aria-label="摄像头特效工作室">
+          <div class="preview-column">
+            <div class="preview-device phone-device" id="previewDevice">
+            <div class="stage phone-stage" id="stage">
+              <div class="phone-hardware" aria-hidden="true"><span class="phone-clock">9:41</span><span class="phone-island"></span><span class="phone-system-icons"><svg viewBox="0 0 42 16"><path d="M2 13v-2m4 2V8m4 5V5m4 8V2M21 4h16v8H21zM39 6v4"/><path d="M24 8h10" stroke-width="4"/></svg></span></div>
+              <video id="camera" muted autoplay playsinline aria-label="本地摄像头画面"></video
+              ><canvas id="scene" aria-label="雨滴、涟漪与草地效果"></canvas>
+              <canvas id="fireworks" aria-label="大笑烟花与头部碰撞爱心粒子"></canvas>
+              <canvas id="plants" aria-label="高低错落的前景花草"></canvas>
+              <div class="phone-live-ui" aria-hidden="true">
+                <div class="phone-live-header">
+                  <div class="phone-host"><span class="phone-avatar"><svg><use href="#i-leaf" /></svg></span><span><strong>微笑花园</strong><small>让好心情开花</small></span></div>
+                  <span class="phone-preview-badge">直播预览</span>
+                </div>
+                <div class="phone-live-bottom">
+                  <div class="phone-comments"><p><span>小雨</span> 原来微笑真的会开花</p><p><span>星星</span> 伸手接住这份好心情 ✨</p></div>
+                  <div class="phone-live-actions"><span class="phone-comment-field">说点什么…</span><span class="phone-action"><svg viewBox="0 0 24 24"><path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9C2 9 5 1 9 4l3 5Zm0 0c10 0 7-8 3-5l-3 5Z" /></svg></span><span class="phone-action"><svg viewBox="0 0 24 24"><path d="M12 21 3 12C-3 4 7-1 12 6c5-7 15-2 9 6Z" /></svg></span><span class="phone-action"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div>
+                  <span class="phone-home-indicator"></span>
+                </div>
+              </div>
+              <div class="stage-top">
+                <span class="stage-label" id="stageLabel"><i></i>等待开启摄像头</span
+                ><span id="fps">画面预览</span>
+              </div>
+              <div class="welcome" id="welcome">
+                <div class="welcome-art"><img src="assets/welcome-crayon.webp" width="157" height="190" alt="蜡笔绘制的黄色铃花" /></div>
+                <h2>直播间 AR 互动特效</h2>
+                <p>微笑下雨，大笑绽放烟花。<br />烟花粒子碰到头顶，反弹成爱心。</p>
+                <button id="startHero" class="primary">
+                  <svg><use href="#i-camera" /></svg>开启摄像头</button
+                ><button id="demoHero" class="welcome-demo">
+                  先看一场雨 <span aria-hidden="true">→</span>
+                </button>
+                <p class="privacy-note">画面仅在设备上处理，不上传、不录制。<br />单人 · 单手体验，无需麦克风。</p>
+              </div>
+              <div class="stage-bottom">
+                <span id="sceneHint">微笑下雨 · 大笑放烟花</span
+                ><button
+                  class="icon-button"
+                  id="fullscreen"
+                  aria-label="进入纯净画面"
+                  title="纯净画面"
+                >
+                  <svg><use href="#i-expand" /></svg>
+                </button>
+              </div>
+              <button id="exitClean" class="exit-clean">退出纯净画面</button>
+            </div>
+            </div>
+          </div>
+          <aside class="controls" aria-label="效果控制">
+            <section class="control-section preview-section">
+              <div class="section-heading"><h2>直播画幅</h2><span class="status-tag" id="formatTag">iPhone 15 Pro</span></div>
+              <div class="format-options" role="group" aria-label="直播画幅"><label><input type="radio" name="previewFormat" id="phonePreview" value="phone" checked /><span>手机竖屏</span></label><label><input type="radio" name="previewFormat" id="desktopPreview" value="desktop" /><span>电脑横屏</span></label></div>
+              <p class="field-hint" id="phonePreviewHint">iPhone 15 Pro · 393 × 852 等比预览。</p>
+              <p class="phone-ui-note" id="phoneUiNote" title="界面与评论仅为示意；实际镜头视野取决于手机摄像头。">直播界面示意 · 未开播</p>
+            </section>
+            <section class="control-section camera-section">
+              <div class="section-heading">
+                <h2>镜头</h2>
+                <span class="status-tag" id="cameraTag" role="status" aria-live="polite">未开启</span>
+              </div>
+              <div class="camera-actions">
+                <button id="start" class="primary">
+                  <svg><use href="#i-camera" /></svg><span>开启摄像头</span></button
+                ><button
+                  id="flip"
+                  class="icon-button outline"
+                  disabled
+                  title="切换前后摄像头"
+                  aria-label="切换前后摄像头"
+                >
+                  <svg><use href="#i-flip" /></svg>
+                </button>
+              </div>
+              <label class="device-label" for="device">摄像头设备</label
+              ><select id="device" disabled>
+                <option>开启后选择设备</option></select
+              ><label class="toggle-row"
+                ><span>镜像画面</span
+                ><input type="checkbox" id="mirror" role="switch" checked /><span
+                  class="switch"
+                  aria-hidden="true"
+                ></span
+              ></label>
+              <div class="message" id="message" role="status" aria-live="polite" hidden></div>
+            </section>
+            <section class="control-section">
+              <div class="section-heading">
+                <h2>微笑感应</h2>
+                <span class="face-state" id="faceState">等待人脸</span>
+              </div>
+              <div class="smile-reading">
+                <svg><use href="#i-smile" /></svg><span id="smileValue">—</span
+                ><span class="reading-caption">微笑强度</span>
+              </div>
+              <div
+                class="smile-meter"
+                role="meter"
+                aria-label="微笑强度"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+                id="smileMeter"
+              >
+                <span id="smileFill"></span><i id="thresholdMark"></i>
+              </div>
+              <div class="meter-caption">
+                <span>放松</span><span id="triggerState">尚未触发</span><span>微笑</span>
+              </div>
+              <label class="threshold-label" for="smileThreshold"><span>微笑触发阈值</span><output id="thresholdValue" for="smileThreshold">10%</output></label>
+              <input class="threshold-slider" type="range" id="smileThreshold" min="5" max="90" step="1" value="10" aria-describedby="thresholdHint" title="数值越低越容易触发，调高则需要更明显的微笑。" />
+              <p class="field-hint" id="thresholdHint">数值越低越容易触发，调高则需要更明显的微笑。</p>
+            </section>
+            <section class="control-section laugh-section" aria-labelledby="laughTitle">
+              <div class="section-heading"><h2 id="laughTitle">笑意绽放</h2><span class="face-state" id="laughState">等待人脸</span></div>
+              <div class="smile-reading laugh-reading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4m0 10v4M3 12h4m10 0h4M5.6 5.6l2.8 2.8m7.2 7.2 2.8 2.8m0-12.8-2.8 2.8m-7.2 7.2-2.8 2.8"/><circle cx="12" cy="12" r="2"/></svg><span id="laughValue">—</span><span class="reading-caption">大笑强度</span></div>
+              <div class="smile-meter laugh-meter" id="laughMeter" role="meter" aria-label="大笑强度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="laughFill"></span><i id="laughThresholdMark"></i></div>
+              <div class="meter-caption"><span>放松</span><span>张嘴大笑，绽放烟花</span><span>大笑</span></div>
+              <label class="threshold-label" for="laughThreshold"><span>烟花触发阈值</span><output id="laughThresholdValue" for="laughThreshold">60%</output></label>
+              <input class="threshold-slider" id="laughThreshold" type="range" min="50" max="90" step="1" value="60" aria-describedby="laughThresholdHint" title="数值越低越灵敏，调高则需要更明显的张嘴笑容。" />
+              <p class="field-hint" id="laughThresholdHint">数值越低越灵敏，调高则需要更明显的张嘴笑容。</p>
+            </section>
+            <button id="clean" class="secondary full">
+              <svg><use href="#i-expand" /></svg>进入纯净画面
+            </button>
+          </aside>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

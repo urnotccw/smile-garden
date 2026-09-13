@@ -1,0 +1,126 @@
+{
+  "version": "1.4.0",
+  "date": "2026-09-13T07:42:58.345Z",
+  "environment": "Local Windows Chrome headless; static image camera stream; real MediaPipe; not a phone or live-person test",
+  "unitTests": {
+    "passed": 76,
+    "failed": 0
+  },
+  "viewports": [
+    [
+      1366,
+      768
+    ],
+    [
+      1280,
+      600
+    ],
+    [
+      390,
+      844
+    ]
+  ],
+  "samples": [
+    {
+      "mode": "worker",
+      "renderFps": 56,
+      "faceHz": 7,
+      "handHz": 18,
+      "idleHandHz": 6,
+      "faceP95Ms": 147.4,
+      "handP95Ms": 61.8,
+      "startupMs": {
+        "cameraReady": 49,
+        "faceReady": 330,
+        "firstFace": 493,
+        "handReady": 641,
+        "firstHand": 807
+      },
+      "resources": [
+        {
+          "file": "vision_bundle.mjs",
+          "transferSize": 138109,
+          "encodedBodySize": 137809
+        },
+        {
+          "file": "vision_wasm_internal.js",
+          "transferSize": 204584,
+          "encodedBodySize": 204284
+        },
+        {
+          "file": "vision_wasm_internal.wasm",
+          "transferSize": 9574332,
+          "encodedBodySize": 9574032
+        },
+        {
+          "file": "face_landmarker.task",
+          "transferSize": 3758896,
+          "encodedBodySize": 3758596
+        },
+        {
+          "file": "vision_wasm_internal.js",
+          "transferSize": 204584,
+          "encodedBodySize": 204284
+        },
+        {
+          "file": "vision_wasm_internal.wasm",
+          "transferSize": 9574332,
+          "encodedBodySize": 9574032
+        },
+        {
+          "file": "hand_landmarker.task",
+          "transferSize": 7819405,
+          "encodedBodySize": 7819105
+        }
+      ]
+    },
+    {
+      "mode": "main",
+      "renderFps": 38,
+      "faceHz": 7,
+      "handHz": 13,
+      "idleHandHz": 6,
+      "faceP95Ms": 43,
+      "handP95Ms": 80.9,
+      "startupMs": {
+        "cameraReady": 17,
+        "faceReady": 256,
+        "firstFace": 3181,
+        "handReady": 3539,
+        "firstHand": 3677
+      },
+      "resources": [
+        {
+          "file": "vision_bundle.mjs",
+          "transferSize": 138109,
+          "encodedBodySize": 137809
+        },
+        {
+          "file": "vision_wasm_internal.js",
+          "transferSize": 204584,
+          "encodedBodySize": 204284
+        },
+        {
+          "file": "vision_wasm_internal.wasm",
+          "transferSize": 9574332,
+          "encodedBodySize": 9574032
+        },
+        {
+          "file": "face_landmarker.task",
+          "transferSize": 3758896,
+          "encodedBodySize": 3758596
+        },
+        {
+          "file": "vision_wasm_internal.wasm",
+          "transferSize": 9574332,
+          "encodedBodySize": 9574032
+        },
+        {
+          "file": "hand_landmarker.task",
+          "transferSize": 7819405,
+          "encodedBodySize": 7819105
+        }
+      ]
+    }
+  ]
+}
