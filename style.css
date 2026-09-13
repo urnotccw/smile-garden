@@ -264,18 +264,6 @@ svg {
 .welcome .primary:hover {
   background: #f1f7d4;
 }
-.welcome-demo {
-  background: none;
-  border: 0;
-  color: #c4d9cd;
-  font-size: 12px;
-  min-height: 44px;
-  margin-top: 9px;
-  padding: 9px 15px;
-}
-.welcome-demo:hover {
-  color: white;
-}
 .icon-button {
   display: inline-flex;
   align-items: center;
@@ -564,9 +552,6 @@ select {
   width: 100vw;
   border-radius: 0;
 }
-.stage.demo-on .stage-label i {
-  background: #d8e7a2;
-}
 @media (min-width: 1500px) {
   .studio {
     grid-template-columns: minmax(0, 1fr) 300px;
@@ -756,7 +741,7 @@ select {
 .phone-stage .welcome h2 { font-size: 24px; }
 .phone-stage .welcome p { font-size: 12px; line-height: 1.8; }
 .phone-stage .welcome .privacy-note { font-size: 10px; }
-.phone-stage.camera-on .phone-live-ui, .phone-stage.demo-on .phone-live-ui {
+.phone-stage.camera-on .phone-live-ui {
   display: block; position: absolute; inset: 0; z-index: 5; pointer-events: none;
   color: white; font-size: 11px; text-shadow: 0 1px 5px #10292388;
   background: linear-gradient(#10292335, transparent 18%, transparent 73%, #10292330);
@@ -793,7 +778,6 @@ select {
   .stage:not(.phone-stage) .stage-top, .stage:not(.phone-stage) .stage-bottom { display: none; }
   .stage:not(.phone-stage) .welcome h2 { font-size: 18px; margin: 0 0 4px; }
   .stage:not(.phone-stage) .welcome p { font-size: 10px; margin: 0 0 6px; }
-  .stage:not(.phone-stage) .welcome-demo { min-height: 30px; margin: 0; padding: 4px; }
 }
 @media (max-height: 560px) {
   .preview-device.phone-device { width: min(350px, 100%); }

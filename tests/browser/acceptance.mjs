@@ -29,7 +29,9 @@ try {
   await page.locator('#smileThreshold').fill('16');await page.locator('#laughThreshold').fill('65');
   await page.reload();await page.waitForFunction(()=>gardenDiagnostics().smileThreshold===.16&&gardenDiagnostics().laughThreshold===.65);
   await page.locator('#desktopPreview').check();await page.waitForFunction(()=>Math.abs(gardenDiagnostics().stageWidth/gardenDiagnostics().stageHeight-16/9)<.001);
-  await page.locator('#phonePreview').check();await page.click('#demoHero');
+  await page.locator('#phonePreview').check();
+  assert.equal(await page.locator('#demoHero').count(),0);
+  assert.equal(await page.evaluate(()=>gardenDiagnostics().drops),0);
   await page.evaluate(async()=>{
    const {GardenScene}=await import('/effects.js');const original=GardenScene.prototype.update;
    GardenScene.prototype.update=function(...args){window.testScene=this;return original.apply(this,args);};

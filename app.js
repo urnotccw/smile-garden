@@ -41,7 +41,6 @@ const state = {
   busy: false,
   epoch: 0,
   facing: "user",
-  demo: false,
   lastFireworksActive: false,
   face: false,
   trackingReady: false,
@@ -103,17 +102,15 @@ function displayTracking(result) {
   $("smileFill").style.transform = `scaleX(${result.value})`;
   $("smileMeter").setAttribute("aria-valuenow", Math.round(result.value * 100));
   $("triggerState").textContent =
-    suppressGarden(!!state.stream && !state.demo, laugh.active, fireworks.rainBlocked)
+    suppressGarden(!!state.stream, laugh.active, fireworks.rainBlocked)
       ? "烟花中 · 暂停下雨"
-      : state.demo
-        ? "演示中"
-        : result.active
+      : result.active
             ? "正在下雨"
             : "尚未触发";
   cameraButtons();
 }
 function displayLaugh() {
-  const detected=state.face && !!state.stream && !state.demo;
+  const detected=state.face && !!state.stream;
   const value=detected?Math.round(laugh.value*100):0;
   setText("laughValue",detected?`${value}%`:"—");
   $("laughFill").style.transform=`scaleX(${value/100})`;
@@ -122,21 +119,16 @@ function displayLaugh() {
 function updateStage() {
   displayLaugh();
   stage.classList.toggle("camera-on", !!state.stream);
-  stage.classList.toggle("demo-on", state.demo);
-  $("welcome").hidden = !!state.stream || state.demo || scene.grassLevel > 0 || fireworks.active;
+  $("welcome").hidden = !!state.stream || scene.grassLevel > 0 || fireworks.active;
   const label =
-    state.demo
-        ? "效果演示 · 非表情识别"
-        : state.stream
+    state.stream
           ? state.trackingReady
             ? "本地摄像头 · 实时识别"
             : "摄像头已开启 · 加载识别模型"
           : "等待开启摄像头";
   $("stageLabel").lastChild.textContent = label;
   setText('cameraTag', cameraStatus(state));
-  $("sceneHint").textContent = state.demo
-    ? "正在演示：雨落、涟漪、花园生长"
-    : "微笑下雨 · 歪头起风";
+  $("sceneHint").textContent = "微笑下雨 · 歪头起风";
 }
 function resetInteraction() {
   schedule.reset();
@@ -388,7 +380,6 @@ async function startCamera(deviceId) {
       }
     });
     state.busy = false;
-    state.demo = false;
     metrics.markStartup('cameraReady');
     applyMirror();
     cameraButtons();
@@ -468,7 +459,6 @@ function receiveResult(data) {
   fireworks.observeHead(freshness.position ? data.head : null, time, $("mirror").checked);
   if (
     laugh.update(laughScore(data.categories), hasFace, time) &&
-    !state.demo &&
     state.stream
   ) {
     if (fireworks.launch(laugh.volleySize)) {
@@ -636,14 +626,6 @@ function applySettings() {
   applyMirror();
   saveSettings();
 }
-function toggleDemo() {
-  state.demo = !state.demo;
-
-  updateStage();
-  $("triggerState").textContent = state.demo ? "演示中" : "尚未触发";
-  if (state.demo) message("正在演示降雨。开启摄像头后，切换为真实表情互动。");
-  else message("");
-}
 async function enterClean() {
   state.clean = true;
   stage.classList.add("clean", "show-exit");
@@ -667,7 +649,6 @@ async function exitClean() {
 }
 $("start").onclick = () => (state.stream || state.busy ? stopCamera() : startCamera());
 $("startHero").onclick = () => startCamera();
-$("demoHero").onclick = toggleDemo;
 function applyPreviewFormat() {
   state.phone = $("phonePreview").checked;
   scene.phonePreview = state.phone;
@@ -777,39 +758,30 @@ function loop(time) {
       displayTracking(gate.snapshot(false));
     }
     const active =
-      state.demo || !!(state.stream && state.face && gate.active);
-    const wind = effectSettings.wind
-      ? state.demo
-        ? Math.sin(time * 0.00043) * 0.24
-        : state.face
-          ? gate.wind
-          : 0
-      : 0;
+      !!(state.stream && state.face && gate.active);
+    const wind = effectSettings.wind && state.face ? gate.wind : 0;
     const smiling =
-      state.demo ||
       !!(
         state.stream &&
         state.face &&
         state.lastRaw >= gate.threshold - Math.min(.08,gate.threshold*.4)
       );
     const rainSuppressed = suppressGarden(
-      !!state.stream && !state.demo, laugh.active, fireworks.rainBlocked,
+      !!state.stream, laugh.active, fireworks.rainBlocked,
     );
     fireworks.reducedMotion=reducedMotion.matches;
     fireworks.returningToRain=!rainSuppressed&&active;
     fireworks.update(dt, time);
     const head=fireworks.headTracker.head;
     const lowHeadroom=head && head.y-Math.hypot(head.rx*Math.sin(head.angle),head.ry*Math.cos(head.angle))-12<32;
-    setText("laughState",state.demo?"降雨演示中":!state.stream||!state.face?"等待人脸":lowHeadroom?"稍微后退，留出头顶空间":laugh.active?"烟花绽放中":fireworks.rainBlocked?"星光缓缓落下":"张嘴笑一笑");
-    scene.update(dt, active, wind, state.demo ? 0.7 : gate.value, smiling, elapsed, rainSuppressed);
+    setText("laughState",!state.stream||!state.face?"等待人脸":lowHeadroom?"稍微后退，留出头顶空间":laugh.active?"烟花绽放中":fireworks.rainBlocked?"星光缓缓落下":"张嘴笑一笑");
+    scene.update(dt, active, wind, gate.value, smiling, elapsed, rainSuppressed);
     palmRain.update(dt, fireworks.palmTracker.palm, fireworks.palmTracker.generation);
     setText(
       "triggerState",
       rainSuppressed
         ? "烟花中 · 暂停下雨"
-        : state.demo
-          ? "演示中"
-          : active
+        : active
               ? "正在下雨"
               : "尚未触发",
     );
@@ -825,14 +797,14 @@ function loop(time) {
       state.lastFireworksActive = fireworks.active;
       updateStage();
     }
-    const hideWelcome = !!state.stream || state.demo || scene.grassLevel > 0 || fireworks.active;
+    const hideWelcome = !!state.stream || scene.grassLevel > 0 || fireworks.active;
     stage.classList.toggle("fireworks-active", fireworks.active);
     if ($("welcome").hidden !== hideWelcome) $("welcome").hidden = hideWelcome;
     setText(
       "sceneHint",
-      state.stream && !state.trackingReady && !state.demo
+      state.stream && !state.trackingReady
         ? cameraStatus(state)
-        : state.stream && state.trackingReady && !state.face && !state.demo
+        : state.stream && state.trackingReady && !state.face
         ? "请靠近镜头，让面部完整入镜"
         : rainSuppressed
         ? "托手接爱心 · 托稳后挥手抛星星"
@@ -878,7 +850,6 @@ window.gardenDiagnostics = () => ({
   startupProgress: state.startupProgress,
   smile: gate.value,
   triggered: gate.active,
-  demo: state.demo,
   phonePreview: state.phone,
   stageWidth: scene.w,
   stageHeight: scene.h,
