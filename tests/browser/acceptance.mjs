@@ -22,12 +22,17 @@ try {
  browser=await chromium.launch({headless:true,...(process.env.BROWSER_PATH?{executablePath:process.env.BROWSER_PATH}:{})});
  for(const [width,height] of (process.env.TRACKING_ONLY ? [] : [[1366,768],[1280,600],[390,844]])){
   const page=await browser.newPage({viewport:{width,height}}),errors=[];
+  await page.addInitScript(()=>{
+   const key='smile-garden-settings-v1';
+   if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify({grow:false}));
+  });
   page.on('pageerror',e=>errors.push(e.message));await page.goto(base);
   await page.waitForFunction(()=>gardenDiagnostics().assetLoaded);
   assert.equal(await page.locator('#phonePreview').isChecked(),true);
   if(width>760){const bounds=await page.locator('.controls').boundingBox();assert.ok(bounds.y+bounds.height<=height);}
   await page.locator('#smileThreshold').fill('16');await page.locator('#laughThreshold').fill('65');
   await page.reload();await page.waitForFunction(()=>gardenDiagnostics().smileThreshold===.16&&gardenDiagnostics().laughThreshold===.65);
+  assert.equal(await page.evaluate(()=>Object.hasOwn(JSON.parse(localStorage.getItem('smile-garden-settings-v1')),'grow')),false);
   await page.locator('#desktopPreview').check();await page.waitForFunction(()=>Math.abs(gardenDiagnostics().stageWidth/gardenDiagnostics().stageHeight-16/9)<.001);
   await page.locator('#phonePreview').check();
   assert.equal(await page.locator('#demoHero').count(),0);
@@ -38,7 +43,7 @@ try {
   });
   await page.waitForFunction(()=>window.testScene);
   await page.evaluate(()=>{
-   const s=window.testScene;s.clear();s.grassLevel=1;
+   const s=window.testScene;if(!s.grow)throw Error('legacy setting disabled growth');s.clear();s.grassLevel=1;
    for(let i=0;i<100;i++)s.waterSeed(.7,.99);
    for(const p of s.plants){p.age=4;p.watered=s.time;}
    const first=s.visiblePlants();if(first!==s.visiblePlants())throw Error('layout cache missed');

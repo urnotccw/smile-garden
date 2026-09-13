@@ -5,6 +5,7 @@ import { loadCrayonSprites } from "./crayon.js";
 import { plantGrowth } from "./plant-growth.js";
 const rnd = (a, b) => a + Math.random() * (b - a),
   ease = (t) => 1 - Math.pow(1 - clamp(t), 3);
+const GRASS_READY = 0.3;
 export class GardenScene {
   constructor(canvas, onCount = () => {}, plantCanvas = canvas) {
     this.canvas = canvas;
@@ -129,6 +130,15 @@ export class GardenScene {
     this.plantSequence = plantSequence();
   }
   update(dt, active, wind, strength = 0.6, smiling = active, elapsed = dt, rainSuppressed = false) {
+    // Advance the garden by visible elapsed time, even on a 10–15 FPS device.
+    // Small steps keep rain/palm collisions and spring motion stable. Long
+    // background gaps are bounded instead of spawning a backlog of flowers.
+    const duration = clamp(elapsed, 0, 0.5);
+    const steps = Math.max(1, Math.ceil(duration / 0.05));
+    for (let i = 0; i < steps; i++)
+      this.step(duration / steps, active, wind, strength, smiling, rainSuppressed);
+  }
+  step(dt, active, wind, strength, smiling, rainSuppressed) {
     this.rainSuppressed = rainSuppressed;
     if (rainSuppressed) {
       this.drops.length = 0;
@@ -139,7 +149,7 @@ export class GardenScene {
       active = false;
     }
     const ended = this.lifetime.update(
-      elapsed,
+      dt,
       smiling,
       this.grassLevel > 0 || this.drops.length > 0,
       rainSuppressed,
@@ -160,7 +170,7 @@ export class GardenScene {
     this.rain += ((active ? 1 : 0) - this.rain) * (1 - Math.exp(-dt * (active ? 3.5 : 2.5)));
     if (this.rain > 0.08) this.grassLevel = Math.min(1, this.grassLevel + dt / 4.5);
     if (!this.grow) this.water = [];
-    if (!rainSuppressed && this.grassLevel === 1 && this.water.length) {
+    if (!rainSuppressed && this.grassLevel >= GRASS_READY && this.water.length) {
       this.seedDelay -= dt;
       if (this.seedDelay <= 0) {
         const seed = this.water.shift();
@@ -193,7 +203,7 @@ export class GardenScene {
     this.drops = this.drops.filter((d) => !d.dead && d.age < 8 && d.x > -0.2 && d.x < 1.2);
     for (const r of this.ripples) {
       r.age += dt;
-      if (!r.planted && r.age > 0.55) {
+      if (!r.planted && r.age > 0.3) {
         r.planted = true;
         if (this.grow) this.waterSeed(r.x, r.y);
       }
@@ -267,8 +277,9 @@ export class GardenScene {
   }
   waterSeed(x, y) {
     if (!this.grow) return;
-    // Save watered positions until the green ground has finished appearing.
-    if (this.grassLevel < 1) {
+    // The first watered flower can emerge as soon as the ground is visible;
+    // the remaining green wash continues to build behind it.
+    if (this.grassLevel < GRASS_READY) {
       if (this.water.length < 36 && !this.water.some((p) => Math.abs(p.x - x) * this.w < 27))
         this.water.push({ x, y });
       return;
@@ -289,6 +300,10 @@ export class GardenScene {
       return;
     }
     let type = this.plantSequence[this.nextPlant++ % this.plantSequence.length];
+    // Make the first response a recognizable medium flower, including in the
+    // center, instead of randomly choosing a tiny grass sprout.
+    const firstFlower = this.plants.length === 0;
+    if (firstFlower) type = !this.atlas?.naturalWidth && this.extraAtlas?.naturalWidth ? 10 : 2;
     // Low flowers leave the middle open for the host; tall plants frame the sides.
     if(x>.32 && x<.68 && this.heightRanges[type][1]>.3)
       type=[0,8,1,9,2,6][(this.nextPlant-1)%6];
@@ -308,19 +323,19 @@ export class GardenScene {
       type,
       height,
       depth,
-      opacity: rnd(
+      opacity: (firstFlower ? rnd(0.8, 0.9) : rnd(
         ...[
           [0.46, 0.58],
           [0.7, 0.82],
           [0.94, 1],
         ][(this.nextPlant - 1) % 3],
-      ) * (x>.32 && x<.68 ? .9 : 1),
+      )) * (x>.32 && x<.68 ? .9 : 1),
       growth: target,
       bend: 0,
       bendVelocity: 0,
       target,
-      growDuration: rnd(2.1, 3.1),
-      growDelay: rnd(0, 0.18),
+      growDuration: this.plants.length === 0 ? rnd(1.45, 1.85) : rnd(2.1, 3.1),
+      growDelay: this.plants.length === 0 ? 0 : rnd(0, 0.18),
       age: 0,
       seed: rnd(0, 8),
       watered: this.time,
@@ -554,7 +569,6 @@ export class GardenScene {
       w = this.w,
       h = this.h;
     if (this.plantCanvas !== this.canvas) c.clearRect(0, 0, w, h);
-    if (this.atlas.complete && this.atlas.naturalWidth) {
       for (const p of this.visiblePlants()) {
         const atlas = p.type < 8 ? this.atlas : this.extraAtlas;
         if (!atlas.complete || !atlas.naturalWidth) continue;
@@ -572,7 +586,6 @@ export class GardenScene {
         if (pose.scale > 0) c.drawImage(atlas, ...rect, -pw / 2, -ph, pw, ph);
         c.restore();
       }
-    }
   }
   paintGrass() {
     // Cache broad wax strokes and broken pigment once; no per-frame texture noise.

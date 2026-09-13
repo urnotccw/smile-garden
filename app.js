@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id),
   video = $("camera"),
   stage = $("stage");
 // Effect parameters outlive their removed UI; preserve saved settings on this device.
-const effectSettings = {threshold:10,density:10,trail:55,grow:true,wind:true,laughThreshold:60};
+const effectSettings = {threshold:10,density:10,trail:55,wind:true,laughThreshold:60};
 const gate = new SmileGate(0.1),
   scene = new GardenScene(
     $("scene"),
@@ -578,7 +578,6 @@ function saveSettings() {
         rainTuning: 1,
         trail: effectSettings.trail,
         mirror: $("mirror").checked,
-        grow: effectSettings.grow,
         wind: effectSettings.wind,
       }),
     );
@@ -599,8 +598,7 @@ function loadSettings() {
         ["trail", 0, 80],
       ])
         if (Number.isFinite(s[key])) effectSettings[key] = clamp(s[key], min, max);
-      for (const k of ["grow", "wind"])
-        if (typeof s[k] === "boolean") effectSettings[k] = s[k];
+      if (typeof s.wind === "boolean") effectSettings.wind = s.wind;
       if(typeof s.mirror === "boolean") $("mirror").checked = s.mirror;
     }
   } catch {}
@@ -615,7 +613,9 @@ function applySettings() {
   $("thresholdMark").style.left=`${effectSettings.threshold}%`;
   scene.density = effectSettings.density;
   scene.trail = effectSettings.trail / 100;
-  scene.grow = effectSettings.grow;
+  // Growth is part of the effect; its removed legacy toggle must not disable
+  // flowers on devices which previously saved grow:false.
+  scene.grow = true;
   const laughThreshold=effectSettings.laughThreshold/100;
   if(laugh.threshold!==laughThreshold){laugh.active=false;laugh.since=null;laugh.below=null;}
   laugh.threshold = laughThreshold;
