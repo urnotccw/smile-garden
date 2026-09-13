@@ -6,8 +6,11 @@ export class LiveComposition {
     if (!enabled) return;
     if (!this.mask) {
       this.mask = document.createElement('canvas');
-      this.mask.width = 256; this.mask.height = 256;
+      // Only the bottom 20% contains comments/actions. Preserve the original
+      // mask coordinates, including transparent padding around its soft edges.
+      this.mask.width = 256; this.mask.height = 50;
       const c = this.mask.getContext('2d');
+      c.translate(0,-206);
       for (const [x, y, w, h, alpha] of [[.025,.815,.66,.123,.66],[.035,.918,.92,.064,.4]]) {
         const tile = document.createElement('canvas'); tile.width = 256; tile.height = 256;
         const t = tile.getContext('2d');
@@ -23,6 +26,6 @@ export class LiveComposition {
       }
     }
     context.save();context.globalCompositeOperation='destination-out';context.globalAlpha=1;
-    context.drawImage(this.mask,0,0,width,height);context.restore();
+    context.drawImage(this.mask,0,height*206/256,width,height*50/256);context.restore();
   }
 }

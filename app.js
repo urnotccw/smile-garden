@@ -7,8 +7,10 @@ import { PalmRain } from "./palm-rain.js";
 import { sampleSize, RuntimeMetrics } from './runtime.js';
 import { TrackingSchedule, cameraStatus, faceResultFreshness, TRACKING_TIMEOUT_MS } from './tracking-schedule.js';
 import { LiveComposition } from './live-composition.js';
+import { LayerActivity } from './layer-activity.js';
 import {prepareVision,downloadBytes,boundedInitialization} from './tracker-resources.js';
 const schedule = new TrackingSchedule(), composition = new LiveComposition();
+const layers = new LayerActivity();
 const metrics=new RuntimeMetrics(), debug=new URLSearchParams(location.search).has('debug');
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const $ = (id) => document.getElementById(id),
@@ -785,13 +787,18 @@ function loop(time) {
               ? "正在下雨"
               : "尚未触发",
     );
-    scene.draw();
     brush.tick(time);
-    fireworks.draw();
-    palmRain.draw(fireworks.c, fireworks.starSprites, fireworks.renderQuality.level);
     const liveUI = state.phone && !state.clean;
-    composition.apply(scene.plantCtx, scene.w, scene.h, liveUI);
-    composition.apply(fireworks.c, fireworks.w, fireworks.h, liveUI);
+    if (layers.needsPaint('garden', scene.hasVisualContent)) {
+      scene.draw();
+      composition.apply(scene.plantCtx, scene.w, scene.h, liveUI && scene.plants.length > 0);
+    }
+    const fireworkVisible = fireworks.hasVisualContent || palmRain.particles.length > 0 || debug;
+    if (layers.needsPaint('fireworks', fireworkVisible)) {
+      fireworks.draw();
+      if (palmRain.particles.length) palmRain.draw(fireworks.c, fireworks.starSprites, fireworks.renderQuality.level);
+      composition.apply(fireworks.c, fireworks.w, fireworks.h, liveUI && fireworkVisible);
+    }
     if (debug) drawTrackingGuide();
     if (state.lastFireworksActive !== fireworks.active) {
       state.lastFireworksActive = fireworks.active;

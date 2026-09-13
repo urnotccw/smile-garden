@@ -432,6 +432,10 @@ export class GardenScene {
       this.brushHits++;
     }
   }
+  get hasVisualContent() {
+    return this.grassLevel > 0 || this.drops.length > 0 || this.ripples.length > 0 ||
+      this.splashes.length > 0 || this.plants.length > 0;
+  }
   draw() {
     const c = this.ctx,
       w = this.w,
@@ -440,7 +444,7 @@ export class GardenScene {
     if (this.grassLevel > 0) {
       c.save();
       c.globalAlpha = this.grassLevel * this.grassLevel * (3 - 2 * this.grassLevel);
-      c.drawImage(this.grass, 0, 0, w, h);
+      c.drawImage(this.grass, 0, this.grassTop * h, w, (1 - this.grassTop) * h);
       c.restore();
     }
     c.lineCap = "round";
@@ -589,11 +593,19 @@ export class GardenScene {
   }
   paintGrass() {
     // Cache broad wax strokes and broken pigment once; no per-frame texture noise.
-    const w = (this.grass.width = Math.max(1, Math.min(1100, Math.round(this.w)))),
-      h = (this.grass.height = Math.max(1, Math.round((this.h * w) / Math.max(1, this.w)))),
-      c = this.grass.getContext("2d");
-    const top = 0.84,
-      coverage = 1 - top;
+    const w = Math.max(1, Math.min(1100, Math.round(this.w))),
+      h = Math.max(1, Math.round((this.h * w) / Math.max(1, this.w))),
+      top = 0.84, coverage = 1 - top;
+    // Retain only the painted band, with one transparent row for resampling.
+    // Keep the original full-screen coordinates and grain seed for identical art.
+    const offset = Math.max(0, Math.floor(h * top) - 1);
+    if (this.grassSourceHeight === h && this.grass.width === w) return;
+    this.grassSourceHeight = h;
+    this.grassTop = offset / h;
+    this.grass.width = w;
+    this.grass.height = h - offset;
+    const c = this.grass.getContext("2d");
+    c.translate(0, -offset);
     const ground = c.createLinearGradient(0, h * top, 0, h);
     ground.addColorStop(0, "rgba(203,221,161,0)");
     ground.addColorStop(0.2, "rgba(196,214,148,.8)");
@@ -649,7 +661,7 @@ export class GardenScene {
     c.restore();
     // Paper-tooth gaps break the flat fill, including its soft upper edge.
     const y0 = Math.floor(h * top),
-      texture = c.getImageData(0, y0, w, h - y0),
+      texture = c.getImageData(0, y0 - offset, w, h - y0),
       pixels = texture.data;
     let seed = 73129;
     for (let i = 0; i < pixels.length; i += 4) {
@@ -667,7 +679,7 @@ export class GardenScene {
         pixels[i + 2] += (207 - pixels[i + 2]) * 0.25;
       }
     }
-    c.putImageData(texture, 0, y0);
+    c.putImageData(texture, 0, y0 - offset);
   }
   stats() {
     return {

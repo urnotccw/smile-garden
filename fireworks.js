@@ -652,6 +652,11 @@ export class Fireworks {
   get rainBlocked() {
     return this.rockets.length > 0 || !!this.rainGate?.blocked;
   }
+  get hasVisualContent() {
+    return this.active || this.shockwaves.length > 0 || this.impacts.length > 0 ||
+      (this.atmosphere?.events.length || 0) > 0 || (this.motifLayers?.events.length || 0) > 0 ||
+      (this.waterGround?.opacity || 0) > 0;
+  }
   draw() {
     const c = this.c;
     const quality = this.reducedMotion ? 2 : this.renderQuality?.level || 0;
