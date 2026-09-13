@@ -51,3 +51,14 @@ test('Worker publishes face before hand and releases frame only after both compl
  assert.deepEqual(calls,['face','hand']);assert.deepEqual(events.map(e=>e.type),['face','hand','result']);
  assert.equal(events.at(-1).faceUpdated,false);
 });
+
+test('Worker defers hand initialization until after first face result with a one-second head start',async()=>{
+ const events=[],timers=[];
+ const context=vm.createContext({self:{postMessage:m=>events.push(m)},performance:{now:()=>10},setTimeout:(fn,ms)=>timers.push({fn,ms})});
+ vm.runInContext(readFileSync(new URL('../tracker-worker.js',import.meta.url),'utf8')+`
+ detector={detectForVideo:()=>({faceLandmarks:[],faceBlendshapes:[]})};
+ canvas={width:640,height:480};ctx={drawImage(){}};beginHands=()=>{};
+ `,context);
+ for(let i=0;i<2;i++)await context.self.onmessage({data:{type:'frame',time:i+1,epoch:1,wantFace:true,wantHand:false,bitmap:{width:640,height:480,close(){}}}});
+ assert.equal(timers.length,1);assert.equal(timers[0].ms,1000);assert.equal(events[0].type,'face');
+});

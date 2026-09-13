@@ -1,19 +1,27 @@
 let detector,
   handDetector,
   canvas,
-  ctx;
+  ctx,
+  beginHands = null;
 self.onmessage = async ({ data }) => {
   if (data.type === "init") {
+    let resources;
     try {
+      // Some embedded browsers expose OffscreenCanvas but lack its WebGL
+      // implementation. Fail early so the existing main-thread path can run.
+      const probe = new OffscreenCanvas(1,1);
+      const gl = probe.getContext('webgl2') || probe.getContext('webgl');
+      if(!gl)throw new Error('Worker WebGL unavailable');
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
       const { FaceLandmarker, HandLandmarker, FilesetResolver } = await import(
         "./vendor/vision_bundle.mjs"
       );
-      const files = await FilesetResolver.forVisionTasks(
-        new URL("./vendor/wasm/", self.location.href).href,
-      );
-      detector = await FaceLandmarker.createFromOptions(files, {
+      const {prepareVision,downloadBytes,boundedInitialization}=await import('./tracker-resources.js');
+      resources=await prepareVision(FilesetResolver,self.location.href,progress=>self.postMessage({type:'progress',progress}));
+      self.postMessage({type:'progress',progress:{phase:'initialize'}});
+      detector = await boundedInitialization(FaceLandmarker.createFromOptions(resources.files, {
         baseOptions: {
-          modelAssetPath: new URL("./vendor/face_landmarker.task", self.location.href).href,
+          modelAssetBuffer: resources.face,
           delegate: "CPU",
         },
         runningMode: "VIDEO",
@@ -22,15 +30,19 @@ self.onmessage = async ({ data }) => {
         minFaceDetectionConfidence: 0.6,
         minFacePresenceConfidence: 0.6,
         minTrackingConfidence: 0.6,
-      });
+      }));
+      resources.face=null;
       canvas = new OffscreenCanvas(640, 480);
       ctx = canvas.getContext("2d");
       self.postMessage({ type: "ready", handReady: false, handLoading: true });
+      // Start hands only after the first face result has reached the page.
+      beginHands = async () => {
       let handError = null;
       try {
-        handDetector = await HandLandmarker.createFromOptions(files, {
+        const handBytes=await downloadBytes(new URL('./vendor/hand_landmarker.task',self.location.href).href);
+        handDetector = await boundedInitialization(HandLandmarker.createFromOptions(resources.files, {
           baseOptions: {
-            modelAssetPath: new URL("./vendor/hand_landmarker.task", self.location.href).href,
+            modelAssetBuffer: handBytes,
             delegate: "CPU",
           },
           runningMode: "VIDEO",
@@ -38,16 +50,19 @@ self.onmessage = async ({ data }) => {
           minHandDetectionConfidence: 0.5,
           minHandPresenceConfidence: 0.5,
           minTrackingConfidence: 0.55,
-        });
+        }));
       } catch (e) {
         handError = e.message;
       }
-      const resources=performance.getEntriesByType('resource').map(r=>({
+      resources.dispose();
+      const timings=performance.getEntriesByType('resource').map(r=>({
         file:r.name.split('/').pop(),transferSize:r.transferSize,encodedBodySize:r.encodedBodySize
       }));
-      self.postMessage({ type: "hands-ready", handReady: !!handDetector, handError, resources });
+      self.postMessage({ type: "hands-ready", handReady: !!handDetector, handError, resources:timings });
+      };
     } catch (e) {
-      self.postMessage({ type: "error", error: e.message });
+      resources?.dispose();
+      self.postMessage({ type: "error", error: e.message, code:e.code });
     }
   } else if (data.type === "frame") {
     try {
@@ -67,6 +82,7 @@ self.onmessage = async ({ data }) => {
           categories: r.faceBlendshapes[0]?.categories || [],
           eyes: face ? [face[33],face[263]] : null,
           head: face ? [face[10],face[152],face[234],face[454]] : null });
+        if(beginHands){const start=beginHands;beginHands=null;setTimeout(start,1000);}
       }
       let hand = null,
         handError = null;

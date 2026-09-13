@@ -1,5 +1,7 @@
 // One shared schedule for Worker and fallback. A missed hand still gets probed;
 // a briefly occluded hand keeps its fast cadence so catching does not stutter.
+import {startupText} from './tracker-resources.js';
+
 export class TrackingSchedule {
   constructor() { this.reset(); }
   reset() { this.faceAt = this.handAt = this.handSeen = -Infinity; }
@@ -25,7 +27,7 @@ export function cameraStatus(state) {
   if (state.busy) return '等待摄像头授权';
   if (!state.stream) return '未开启';
   if (state.trackingError) return '识别需重试';
-  if (!state.trackingReady) return '正在准备识别…';
+  if (!state.trackingReady) return state.startupProgress ? startupText(state.startupProgress) : '正在准备识别…';
   if (state.trackingDelayed) return '识别稍慢 · 正在恢复';
   if (state.firstInference === false) return '正在识别画面…';
   if (state.faceRecovering) return '正在重新跟踪面部…';

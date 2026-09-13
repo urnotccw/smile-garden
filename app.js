@@ -7,6 +7,7 @@ import { PalmRain } from "./palm-rain.js";
 import { sampleSize, RuntimeMetrics } from './runtime.js';
 import { TrackingSchedule, cameraStatus, faceResultFreshness, TRACKING_TIMEOUT_MS } from './tracking-schedule.js';
 import { LiveComposition } from './live-composition.js';
+import {prepareVision,downloadBytes,boundedInitialization} from './tracker-resources.js';
 const schedule = new TrackingSchedule(), composition = new LiveComposition();
 const metrics=new RuntimeMetrics(), debug=new URLSearchParams(location.search).has('debug');
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
@@ -45,6 +46,7 @@ const state = {
   face: false,
   trackingReady: false,
   trackingError: false,
+  startupProgress: null,
   firstInference: false,
   trackingDelayed: false,
   faceRecovering: false,
@@ -165,9 +167,14 @@ async function loadTracker() {
       try {
         await new Promise((resolve, reject) => {
           worker = new Worker("./tracker-worker.js");
-          const initTimer = setTimeout(() => reject(new Error("模型初始化超时")), 35000);
+          let initTimer = setTimeout(() => reject(new Error("识别启动超时")), 12000);
           worker.onmessage = ({ data }) => {
-            if (data.type === "ready") {
+            if (data.type === 'progress') {
+              clearTimeout(initTimer);
+              initTimer=setTimeout(()=>reject(new Error('识别启动超时')),data.progress.phase==='download'?65000:20000);
+              state.startupProgress=data.progress;
+              setText('cameraTag',cameraStatus(state));
+            } else if (data.type === "ready") {
               clearTimeout(initTimer);
               state.handReady = data.handReady;
               state.handLoading = !!data.handLoading;
@@ -186,7 +193,7 @@ async function loadTracker() {
               if (data.epoch === state.epoch && state.stream) receiveResult(data);
             } else if (data.type === "error") {
               clearTimeout(initTimer);
-              if (!state.trackingReady) reject(new Error(data.error));
+              if (!state.trackingReady) reject(Object.assign(new Error(data.error),{code:data.code}));
               else trackingFailed(data.error);
             }
           };
@@ -203,14 +210,21 @@ async function loadTracker() {
         console.warn("Worker unavailable, using main-thread tracker:", e.message);
         worker?.terminate();
         worker = null;
+        // Repeating a failed network download on another thread does not fix
+        // the connection. Only browser/runtime incompatibility uses fallback.
+        if(e.code==='ASSET_DOWNLOAD')throw e;
       }
     }
-    const { FaceLandmarker, HandLandmarker, FilesetResolver } = await import(
+    const { FaceLandmarker, HandLandmarker, FilesetResolver } = await boundedInitialization(import(
       "./vendor/vision_bundle.mjs"
-    );
-    const files = await FilesetResolver.forVisionTasks("./vendor/wasm");
+    ),12000);
+    const resources=await prepareVision(FilesetResolver,location.href,progress=>{
+      state.startupProgress=progress;setText('cameraTag',cameraStatus(state));
+    });
+    const files=resources.files;
+    state.startupProgress={phase:'initialize'};setText('cameraTag',cameraStatus(state));
     const options = {
-      baseOptions: { modelAssetPath: "./vendor/face_landmarker.task", delegate: "GPU" },
+      baseOptions: { modelAssetBuffer: resources.face, delegate: "CPU" },
       runningMode: "VIDEO",
       numFaces: 1,
       outputFaceBlendshapes: true,
@@ -219,27 +233,29 @@ async function loadTracker() {
       minTrackingConfidence: 0.6,
     };
     try {
-      mainDetector = await FaceLandmarker.createFromOptions(files, options);
-    } catch {
-      options.baseOptions.delegate = "CPU";
-      mainDetector = await FaceLandmarker.createFromOptions(files, options);
-    }
+      mainDetector = await boundedInitialization(FaceLandmarker.createFromOptions(files, options));
+    } catch (e) {resources.dispose();throw e;}
+    resources.face=null;
     state.trackingReady=true;state.handLoading=true;
     const owner=mainDetector;
-    beginMainHands = function startHands() {
+    beginMainHands = async function startHands() {
       if (mainDetector !== owner) return;
       if (!state.stream) { beginMainHands = startHands; return; }
-      HandLandmarker.createFromOptions(files, {
-        baseOptions: { modelAssetPath: "./vendor/hand_landmarker.task", delegate: "CPU" },
+      try {
+      const handBytes=await downloadBytes(new URL('./vendor/hand_landmarker.task',location.href).href);
+      if(mainDetector!==owner)return;
+      const detector=await boundedInitialization(HandLandmarker.createFromOptions(files, {
+        baseOptions: { modelAssetBuffer: handBytes, delegate: "CPU" },
         runningMode: "VIDEO",
         numHands: 1,
         minHandDetectionConfidence: 0.5,
         minHandPresenceConfidence: 0.5,
         minTrackingConfidence: 0.55,
-      }).then(detector=>{
+      }));
         if(mainDetector!==owner){detector.close();return;}
         mainHandDetector=detector;handsReady(true);
-      }).catch(()=>{if(mainDetector===owner)handsReady(false);});
+      } catch {if(mainDetector===owner)handsReady(false);}
+      finally {resources.dispose();}
     };
   })();
   try {
@@ -331,6 +347,10 @@ async function startCamera(deviceId) {
   state.busy = true;
   state.trackingError = false;
   metrics.beginCamera();
+  state.startupProgress=null;
+  // Start resource preparation during the permission / camera-open wait.
+  // Catch immediately: the user may deny permission before loading finishes.
+  const trackerReady=loadTracker().then(()=>null,error=>error);
   const epoch = state.epoch;
   cameraButtons();
   updateStage();
@@ -374,8 +394,9 @@ async function startCamera(deviceId) {
     cameraButtons();
     updateStage();
     message("画面已连接，正在准备本地人脸识别…");
-    await listDevices();
-    await loadTracker();
+    void listDevices();
+    const trackerError=await trackerReady;
+    if(trackerError)throw trackerError;
     if (epoch !== state.epoch) return;
     metrics.markStartup('faceReady');
     message(state.handLoading?'微笑下雨 · 张嘴大笑放烟花。手势正在准备…':state.handReady?'微笑下雨 · 张嘴大笑放烟花。托起一只手，接住爱心和雨滴。':'表情特效已就绪；手势暂不可用，可用鼠标或触屏拨动花草。',!state.handLoading&&!state.handReady);
@@ -393,7 +414,7 @@ async function startCamera(deviceId) {
     } else {
       state.trackingError = true;
       message(
-        "摄像头已连接，但人脸模型加载失败。请确认 vendor 文件夹完整，关闭再开启摄像头重试。" +
+        "摄像头已连接，识别准备未完成。请检查网络，关闭再开启摄像头重试。" +
           e.message,
         true,
       );
@@ -403,11 +424,13 @@ async function startCamera(deviceId) {
   }
 }
 async function listDevices() {
+  const epoch=state.epoch;
   try {
     const devices = (await navigator.mediaDevices.enumerateDevices()).filter(
         (d) => d.kind === "videoinput",
       ),
       current = state.stream?.getVideoTracks()[0]?.getSettings().deviceId;
+    if(epoch!==state.epoch||!state.stream)return;
     $("device").replaceChildren(
       ...devices.map((d, i) => {
         const o = document.createElement("option");
@@ -426,7 +449,7 @@ function receiveResult(data) {
   // Paint the first face result before the fallback initializes another model.
   if (beginMainHands) {
     const start=beginMainHands;beginMainHands=null;
-    setTimeout(start, 200);
+    setTimeout(start, 1000);
   }
   const time = performance.now(),
     hasFace = !!data.eyes;
@@ -807,7 +830,9 @@ function loop(time) {
     if ($("welcome").hidden !== hideWelcome) $("welcome").hidden = hideWelcome;
     setText(
       "sceneHint",
-      state.stream && state.trackingReady && !state.face && !state.demo
+      state.stream && !state.trackingReady && !state.demo
+        ? cameraStatus(state)
+        : state.stream && state.trackingReady && !state.face && !state.demo
         ? "请靠近镜头，让面部完整入镜"
         : rainSuppressed
         ? "托手接爱心 · 托稳后挥手抛星星"
@@ -850,6 +875,7 @@ window.gardenDiagnostics = () => ({
   face: state.face,
   faceRecovering: state.faceRecovering,
   trackingDelayed: state.trackingDelayed,
+  startupProgress: state.startupProgress,
   smile: gate.value,
   triggered: gate.active,
   demo: state.demo,

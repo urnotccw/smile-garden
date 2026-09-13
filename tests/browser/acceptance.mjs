@@ -61,13 +61,14 @@ try {
     return canvas.captureStream(25);
    };
   },{fallback,face});
+  // Loading starts alongside camera permission, including a denied request.
+  let release;const modelGate=new Promise(r=>release=r);
+  await page.route('**/face_landmarker.task',async route=>{await modelGate;await route.continue();});
   await page.goto(base+'/?debug=1');await page.click('#start');
   await page.waitForFunction(()=>document.querySelector('#message').textContent.includes('权限被拒绝'));
   await page.evaluate(()=>window.rejectCamera=false);
   // Hold model requests to test the otherwise brief loading state.
-  let release;const modelGate=new Promise(r=>release=r);
-  await page.route('**/face_landmarker.task',async route=>{await modelGate;await route.continue();});
-  await page.click('#start');await page.waitForFunction(()=>document.querySelector('#cameraTag').textContent==='正在准备识别…');release();
+  await page.click('#start');await page.waitForFunction(()=>gardenDiagnostics().camera&&!gardenDiagnostics().tracker);release();
   await page.waitForFunction(()=>gardenDiagnostics().tracker&&gardenDiagnostics().handReady,null,{timeout:60000});
   if(face)await page.waitForFunction(()=>gardenDiagnostics().face,null,{timeout:20000});
   // Wait for a full diagnostic window, not just the first inference result.
