@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {TrackingSchedule,cameraStatus} from '../tracking-schedule.js';
+import {TrackingSchedule,cameraStatus,faceResultFreshness} from '../tracking-schedule.js';
 import {RuntimeMetrics} from '../runtime.js';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -23,6 +23,14 @@ test('camera state separates permissions, model loading, missing face and recove
  assert.equal(cameraStatus({stream:true,trackingReady:true}),'请让面部入镜');
  assert.equal(cameraStatus({stream:true,trackingReady:true,face:true,handLoading:true}),'表情就绪 · 手势准备中');
  assert.equal(cameraStatus({stream:true,trackingError:true}),'识别需重试');
+ assert.equal(cameraStatus({stream:true,trackingReady:true,trackingDelayed:true}),'识别稍慢 · 正在恢复');
+ assert.equal(cameraStatus({stream:true,trackingReady:true,faceRecovering:true}),'正在重新跟踪面部…');
+});
+test('moderately slow expression results remain usable but stale head positions do not',()=>{
+ assert.deepEqual(faceResultFreshness(0,200),{age:200,expression:true,position:true});
+ assert.deepEqual(faceResultFreshness(0,500),{age:500,expression:true,position:false});
+ assert.equal(faceResultFreshness(0,701).expression,false);
+ assert.equal(faceResultFreshness(undefined,800).expression,false);
 });
 test('face and hand latency and inference costs are reported independently',()=>{
  const m=new RuntimeMetrics();m.record('face',100,30);m.record('hand',100,110);

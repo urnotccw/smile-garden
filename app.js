@@ -5,7 +5,7 @@ import { Fireworks } from "./fireworks.js";
 import { LaughGate, laughScore, suppressGarden } from "./laugh.js";
 import { PalmRain } from "./palm-rain.js";
 import { sampleSize, RuntimeMetrics } from './runtime.js';
-import { TrackingSchedule, cameraStatus } from './tracking-schedule.js';
+import { TrackingSchedule, cameraStatus, faceResultFreshness, TRACKING_TIMEOUT_MS } from './tracking-schedule.js';
 import { LiveComposition } from './live-composition.js';
 const schedule = new TrackingSchedule(), composition = new LiveComposition();
 const metrics=new RuntimeMetrics(), debug=new URLSearchParams(location.search).has('debug');
@@ -46,6 +46,8 @@ const state = {
   trackingReady: false,
   trackingError: false,
   firstInference: false,
+  trackingDelayed: false,
+  faceRecovering: false,
   lastResult: 0,
   lastRaw: 0,
   inFlight: false,
@@ -91,9 +93,10 @@ function cameraButtons() {
 }
 function displayTracking(result) {
   state.face = result.face;
+  state.faceRecovering = gate.recovering;
   setText('cameraTag', cameraStatus(state));
   displayLaugh();
-  $("faceState").textContent = result.face ? "已识别人脸" : "未识别人脸";
+  $("faceState").textContent = state.trackingDelayed ? "识别稍慢" : gate.recovering ? "短暂丢失 · 正在跟踪" : result.face ? "已识别人脸" : "未识别人脸";
   $("smileValue").textContent = result.face ? `${Math.round(result.value * 100)}%` : "—";
   $("smileFill").style.transform = `scaleX(${result.value})`;
   $("smileMeter").setAttribute("aria-valuenow", Math.round(result.value * 100));
@@ -136,6 +139,7 @@ function updateStage() {
 function resetInteraction() {
   schedule.reset();
   state.firstInference = false;
+  state.trackingDelayed = false;
   laugh.reset();gate.reset();fireworks.resetTracking();brush.reset();
   state.lastRaw=0;state.lastResult=0;state.lastVideoTime=-1;state.lastFaceInference=-Infinity;
   metrics.reset();displayTracking(gate.snapshot(false));
@@ -426,12 +430,19 @@ function receiveResult(data) {
   }
   const time = performance.now(),
     hasFace = !!data.eyes;
-  if (data.time && time - data.time > 350) {
-    resetInteraction();
+  const freshness = faceResultFreshness(data.time, time);
+  metrics.record("face",time,freshness.age);
+  metrics.recordInference('face', data.inferenceMs);
+  if (!freshness.expression) {
+    // Discard this sample without restarting models, hand tracking or the
+    // expression dwell. The independent silence timeout releases held input.
+    state.trackingDelayed = true;
+    displayTracking(gate.snapshot(state.face));
     return;
   }
+  state.trackingDelayed = false;
   state.firstInference = true;
-  fireworks.observeHead(data.head, time, $("mirror").checked);
+  fireworks.observeHead(freshness.position ? data.head : null, time, $("mirror").checked);
   if (
     laugh.update(laughScore(data.categories), hasFace, time) &&
     !state.demo &&
@@ -442,8 +453,6 @@ function receiveResult(data) {
     }
   }
   state.lastResult = time;
-  metrics.record("face",time,time-data.time);
-  metrics.recordInference('face', data.inferenceMs);
   if (hasFace) metrics.markStartup('firstFace');
   state.lastRaw = hasFace ? smileScore(data.categories) : 0;
   let tilt = 0;
@@ -738,9 +747,11 @@ function loop(time) {
       message("摄像头连接已断开，请重新开启。", true);
     }
     trackFrame(time);
-    if ((state.face || laugh.active) && time - state.lastResult > 650) {
-      resetInteraction();
-
+    if ((state.face || laugh.active) && time - state.lastResult > TRACKING_TIMEOUT_MS) {
+      gate.reset();laugh.reset();state.lastRaw=0;
+      state.trackingDelayed = true;
+      fireworks.observeHead(null, time, $("mirror").checked);
+      displayTracking(gate.snapshot(false));
     }
     const active =
       state.demo || !!(state.stream && state.face && gate.active);
@@ -837,6 +848,8 @@ window.gardenDiagnostics = () => ({
   tracker: state.trackingReady,
   trackerMode: worker ? "worker" : mainDetector ? "main" : "unloaded",
   face: state.face,
+  faceRecovering: state.faceRecovering,
+  trackingDelayed: state.trackingDelayed,
   smile: gate.value,
   triggered: gate.active,
   demo: state.demo,

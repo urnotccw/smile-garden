@@ -17,27 +17,39 @@ export class SmileGate {
     this.belowSince = null;
     this.lastTime = null;
     this.lastFaceTime = null;
+    this.recovering = false;
     this.wind = 0;
   }
   update(score, hasFace, time, tilt = 0) {
     const dt = this.lastTime === null ? 50 : Math.max(0, time - this.lastTime);
     this.lastTime = time;
     if (!hasFace) {
-      this.value = 0;
-      this.active = false;
-      this.aboveSince = null;
-      this.belowSince = null;
+      // Hold a confirmed expression through a brief dropout; missing samples
+      // never count toward confirming a new smile or keep steering the wind.
       this.wind = 0;
+      if (this.lastFaceTime !== null && time - this.lastFaceTime <= 280) {
+        this.recovering = true;
+        return this.snapshot(true);
+      }
+      this.reset();
+      this.lastTime = time;
       return this.snapshot(false);
     }
+    if (this.recovering) {
+      if (time - this.lastFaceTime > 280) this.reset();
+      else if (this.aboveSince !== null) this.aboveSince += time - this.lastFaceTime;
+      this.belowSince = null;
+    }
+    this.recovering = false;
     this.lastFaceTime = time;
-    const alpha = 1 - Math.exp(-dt / 100);
+    this.lastTime = time;
+    const alpha = 1 - Math.exp(-Math.min(dt, 150) / 80);
     this.value += (clamp(score) - this.value) * alpha;
     this.wind += (clamp(tilt, -1, 1) - this.wind) * alpha;
     if (!this.active) {
       if (this.value >= this.threshold) {
         this.aboveSince ??= time;
-        if (time - this.aboveSince >= 180) {
+        if (time - this.aboveSince >= 120) {
           this.active = true;
           this.belowSince = null;
         }

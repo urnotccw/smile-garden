@@ -28,6 +28,7 @@ export class GardenScene {
     this.grow = true;
     this.wind = 0;
     this.rain = 0;
+    this.rainWasActive = false;
     this.credit = 0;
     this.time = 0;
     loadCrayonSprites()
@@ -122,6 +123,7 @@ export class GardenScene {
     this.seedDelay = 0;
     this.credit = 0;
     this.rain = 0;
+    this.rainWasActive = false;
     this.nextPlant = 0;
     this.onCount(0);
     this.plantSequence = plantSequence();
@@ -147,6 +149,12 @@ export class GardenScene {
     if (this.canvas.style.opacity !== opacity) this.canvas.style.opacity = opacity;
     if (this.plantCanvas.style.opacity !== opacity) this.plantCanvas.style.opacity = opacity;
     if (ended) return;
+    // Immediate, small visual acknowledgement. Steady rain keeps its existing
+    // density; brief expression jitter cannot repeatedly add starter drops.
+    if (active && !this.rainWasActive && this.drops.length === 0 && this.density > 0) {
+      for (let i = 0; i < 2; i++) this.spawn(true);
+    }
+    this.rainWasActive = active;
     this.time += dt;
     this.wind += (wind - this.wind) * (1 - Math.exp(-dt * 3));
     this.rain += ((active ? 1 : 0) - this.rain) * (1 - Math.exp(-dt * (active ? 3.5 : 2.5)));
@@ -210,11 +218,11 @@ export class GardenScene {
       this.onCount(this.plants.length);
     }
   }
-  spawn() {
+  spawn(starter = false) {
     if (this.drops.length >= 130) return;
     this.drops.push({
       x: rnd(0.03, 0.97),
-      y: rnd(-0.2, -0.03),
+      y: starter ? rnd(0.035, 0.065) : rnd(-0.2, -0.03),
       floor: rnd(0.89, 0.99),
       size: rnd(4.8, 8.2) * (this.phonePreview ? .8 : 1),
       trailScale: rnd(

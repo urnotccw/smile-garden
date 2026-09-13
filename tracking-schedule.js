@@ -13,12 +13,22 @@ export class TrackingSchedule {
   }
 }
 
+// Expressions tolerate more latency than spatial collisions. Old positions
+// must not bounce particles off where the user's head used to be.
+export const TRACKING_TIMEOUT_MS = 1000;
+export function faceResultFreshness(capturedAt, now) {
+  const age = Number.isFinite(capturedAt) ? Math.max(0, now - capturedAt) : Infinity;
+  return { age, expression: age <= 700, position: age <= 350 };
+}
+
 export function cameraStatus(state) {
   if (state.busy) return '等待摄像头授权';
   if (!state.stream) return '未开启';
   if (state.trackingError) return '识别需重试';
   if (!state.trackingReady) return '正在准备识别…';
+  if (state.trackingDelayed) return '识别稍慢 · 正在恢复';
   if (state.firstInference === false) return '正在识别画面…';
+  if (state.faceRecovering) return '正在重新跟踪面部…';
   if (!state.face) return '请让面部入镜';
   if (state.handLoading) return '表情就绪 · 手势准备中';
   return state.handReady ? '表情与手势就绪' : '表情识别就绪';
