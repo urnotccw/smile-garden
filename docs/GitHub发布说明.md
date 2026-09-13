@@ -1,6 +1,6 @@
 # GitHub 源码与 Pages
 
-本目录已准备 GitHub Actions 工作流 `.github/workflows/pages.yml`，尚未上传或启用 GitHub Pages。已有 Sites 在线体验保持可用：https://smile-garden-crayon-urnotccw.urnotccw1.chatgpt.site/
+2026-09-13 已上传完整源码并通过 GitHub Actions 发布到 GitHub Pages。正式体验：[微笑花园](https://urnotccw.github.io/smile-garden/)；公开源码：[urnotccw/smile-garden](https://github.com/urnotccw/smile-garden)。最新烟花分层、移除色片和稀疏下落粒子均已包含。此前的 Sites 地址保留旧版，不作为当前提交链接。
 
 1. 在自己的 GitHub 账号下创建 Public 空仓库，建议名称 `smile-garden`。
 2. 上传项目源码到 main 分支。包含 `.github/workflows/pages.yml`、vendor 模型、WebP 素材、源码和测试；不上传个人照片、凭据、test-results 或本地 .git。
@@ -11,4 +11,4 @@
 
 Pages 不读取 Netlify / Cloudflare 风格的 `_headers`，其缓存和安全响应头由 GitHub 托管层控制；不将本地服务器的响应头验证结果当作 GitHub Pages 的结果。
 
-官方配置参考：[使用自定义工作流部署 GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。本说明不代表部署已经成功。
+官方配置参考：[使用自定义工作流部署 GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。首次发布构建、79 项规则测试及部署均通过；公网首页、脚本、模型及 WASM 已确认返回 HTTP 200。
