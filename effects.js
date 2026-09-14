@@ -23,6 +23,7 @@ export class GardenScene {
     this.grassLevel = 0;
     this.lifetime = new GardenLifetime();
     this.seedDelay = 0;
+    this.bloomClock = 0;
     this.grass = document.createElement("canvas");
     this.density = 10;
     this.dropSerial = 0;
@@ -117,6 +118,7 @@ export class GardenScene {
     this.water = [];
     this.grassLevel = 0;
     this.seedDelay = 0;
+    this.bloomClock = 0;
     this.credit = 0;
     this.rain = 0;
     this.rainWasActive = false;
@@ -214,10 +216,12 @@ export class GardenScene {
     for (const p of this.plants) {
       stepSway(p, dt);
       p.age += dt;
+      if (p.retiringAge != null) p.retiringAge += dt;
       p.growth += (p.target - p.growth) * (1 - Math.exp(-dt * 0.9));
     }
-    if (this.plants.some(p => this.time - p.watered >= 100))
-      this.plants = this.plants.filter((p) => this.time - p.watered < 100);
+    if (this.plants.some(p => this.time - p.watered >= 100 || p.retiringAge >= 2.4))
+      this.plants = this.plants.filter((p) => this.time - p.watered < 100 && !(p.retiringAge >= 2.4));
+    this.renewFlowers(dt, active && smiling && !rainSuppressed);
     if (this.lastCount !== this.plants.length) {
       this.lastCount = this.plants.length;
       this.onCount(this.plants.length);
@@ -337,6 +341,32 @@ export class GardenScene {
       flip: Math.random() < 0.5 ? -1 : 1,
     });
     this.plants.sort((a, b) => a.opacity - b.opacity || b.height - a.height);
+  }
+  renewFlowers(dt, active) {
+    // Real ground rain must establish the garden first. Then sustained smiles
+    // renew it even when subsequent drops are caught by the hand.
+    if (!active || !this.grow || !this.plants.length || this.grassLevel < GRASS_READY) {
+      this.bloomClock = 0;
+      return;
+    }
+    this.bloomClock = (this.bloomClock || 0) + dt;
+    if (this.bloomClock < 3.2 || this.plants.some(p => p.retiringAge != null)) return;
+    this.bloomClock = 0;
+    // Try the largest horizontal gap; phone placement also balances depth/regions.
+    const xs = [.01, ...this.plants.map(p => p.x).sort((a,b) => a-b), .99];
+    let x = .5, gap = 0;
+    for (let i=1;i<xs.length;i++) if (xs[i]-xs[i-1] > gap) {
+      gap = xs[i]-xs[i-1]; x = (xs[i]+xs[i-1])/2;
+    }
+    const count = this.plants.length;
+    this.waterSeed(x, .99);
+    if (this.plants.length > count) return;
+    // Full or spatially crowded: retire one mature, visible flower at a time.
+    // Watering cannot cancel retirement, and its space remains reserved until
+    // the fade finishes, so a new plant never pops over the outgoing one.
+    const oldest = this.visiblePlants().filter(p => p.age >= 8)
+      .reduce((best,p) => !best || p.age > best.age ? p : best, null);
+    if (oldest) oldest.retiringAge = 0;
   }
   plantHeight(p) {
     if(!this.phonePreview)return p.height;
@@ -576,7 +606,8 @@ export class GardenScene {
           g = pose.height,
           ph = h * this.plantHeight(p),
           pw = (ph * rect[2]) / rect[3],
-          fade = clamp((100 - (this.time - p.watered)) / 15);
+          retirement = clamp((p.retiringAge || 0) / 2.4),
+          fade = clamp((100 - (this.time - p.watered)) / 15) * (1-retirement*retirement*(3-2*retirement));
         c.save();
         c.translate(p.x * w, this.plantRootY(p) * h + 3);
         c.rotate((Math.sin(this.time * 1.6 + p.seed) * 0.025 + this.wind * 0.12) * g + p.bend + pose.lean);

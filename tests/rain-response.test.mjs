@@ -87,3 +87,40 @@ test('a ready extra plant atlas can draw while the first atlas is still loading'
  s.plantCtx=new Proxy({drawImage:atlas=>drawn.push(atlas)},{get:(target,key)=>target[key]??(()=>{})});
  s.drawPlants();assert.deepEqual(drawn,[s.extraAtlas]);
 });
+
+for (const phone of [true,false]) test(`sustained smiling renews a bounded garden instead of keeping the first flowers forever (portrait=${phone})`,()=>{
+ const s=scene(phone),seen=new Set();let retirements=0;
+ const limit=phone?10:36;
+ for(let i=0;i<3600;i++){
+  s.update(.05,true,0,.6);
+  assert.ok(s.plants.length<=limit,'outgoing flowers still count toward the cap');
+  assert.ok(s.plants.filter(p=>p.retiringAge!=null).length<=1,'only one retirement at a time');
+  for(const p of s.plants)seen.add(p);
+  if(s.plants.some(p=>p.retiringAge!=null))retirements++;
+ }
+ assert.ok(seen.size>s.plants.length+15,`${seen.size} different flowers appeared with ${s.plants.length} remaining`);
+ assert.ok(retirements>0,'crowded garden fades old flowers');
+ assert.ok(s.plants.length>2,'renewal never empties the garden');
+});
+
+test('retiring flowers fade gradually and watering cannot make them immortal',()=>{
+ const s=scene(true);s.grassLevel=1;s.density=0;s.waterSeed(.3,.99);
+ const p=s.plants[0];p.age=15;p.retiringAge=0;
+ for(let i=0;i<24;i++) {p.watered=s.time;s.update(.05,true,0,.6);}
+ assert.ok(s.plants.includes(p),'still present halfway through fade');
+ assert.ok(Math.abs(p.retiringAge-1.2)<.001);
+ for(let i=0;i<26;i++) {p.watered=s.time;s.update(.05,true,0,.6);}
+ assert.ok(!s.plants.includes(p),'removed only after fade despite repeated watering');
+});
+
+test('renewal pauses with no smile, disabled growth, or firework suppression',()=>{
+ const s=scene(true);s.grassLevel=1;s.waterSeed(.3,.99);
+ for(const [active,grow] of [[false,true],[true,false]]){
+  s.grow=grow;const before=[...s.plants];
+  for(let i=0;i<100;i++)s.renewFlowers(.05,active);
+  assert.deepEqual(s.plants,before);assert.equal(s.bloomClock,0);
+ }
+ s.grow=true;s.bloomClock=3.19;
+ s.update(.05,true,0,.6,true,.05,true);
+ assert.equal(s.bloomClock,0);assert.equal(s.plants.length,1);
+});
