@@ -1,3 +1,4 @@
+import {artwork} from './artwork.js';
 // Shared bitmap atlas is decoded once. Small cached cutouts keep per-frame drawing cheap.
 let spritesPromise;
 // Bake a lower pigment edge and an upper paper highlight into each small cutout.
@@ -21,9 +22,7 @@ export const CRAYON_RECTS = [
   [84,540,218,408], [465,540,227,407], [849,534,222,413], [1228,534,226,414],
 ];
 export function loadCrayonSprites() {
-  return spritesPromise ??= new Promise((resolve,reject)=>{
-    const atlas = new Image();
-    atlas.onload=()=>{
+  return spritesPromise ??= artwork.get('./assets/crayon-hearts-rain.webp').ready.then(atlas=>{
       const sprites=CRAYON_RECTS.map(rect=>{
         const canvas=document.createElement('canvas'), scale=160/Math.max(rect[2],rect[3]);
         canvas.width=Math.ceil(rect[2]*scale);canvas.height=Math.ceil(rect[3]*scale);
@@ -37,10 +36,7 @@ export function loadCrayonSprites() {
         c.fillStyle='rgba(239,249,247,.82)';c.fillRect(0,0,canvas.width,canvas.height);return canvas;
       });
       // Rain keeps its existing atlas; the new matte hearts load independently.
-      resolve({hearts:sprites.slice(0,4).map(s=>layerPigment(s,'#915175')),drops:drops.map(s=>layerPigment(s,'#478baf',.22)),whiteDrops:whiteDrops.map(s=>layerPigment(s,'#7baab7',.16))});
-    };
-    atlas.onerror=()=>reject(new Error('蜡笔素材加载失败'));
-    atlas.src='./assets/crayon-hearts-rain.webp';
+      return {hearts:sprites.slice(0,4).map(s=>layerPigment(s,'#915175')),drops:drops.map(s=>layerPigment(s,'#478baf',.22)),whiteDrops:whiteDrops.map(s=>layerPigment(s,'#7baab7',.16))};
   });
 }
 export function crayonHeartRadius(index, variation=Math.random()) {
@@ -50,9 +46,7 @@ export function crayonHeartRadius(index, variation=Math.random()) {
 
 let heartsPromise;
 export function loadCrayonHearts(){
-  return heartsPromise??=new Promise((resolve,reject)=>{
-    const atlas=new Image();
-    atlas.onload=()=>resolve(Array.from({length:4},(_,i)=>{
+  return heartsPromise??=artwork.get('./assets/crayon-hearts-soft.webp').ready.then(atlas=>Array.from({length:4},(_,i)=>{
       const canvas=document.createElement('canvas');canvas.width=canvas.height=160;
       const cellW=atlas.width/2,cellH=atlas.height/2;
       // Tight, consistent cutouts preserve the actual silhouette at small particle sizes.
@@ -62,22 +56,14 @@ export function loadCrayonHearts(){
       canvas.getContext('2d').drawImage(atlas,(i%2+x)*cellW,(Math.floor(i/2)+y)*cellH,w*cellW,h*cellH,(160-dw)/2,(160-dh)/2,dw,dh);
       return layerPigment(canvas,'#98516f');
     }));
-    atlas.onerror=()=>reject(new Error('蜡笔爱心加载失败'));
-    atlas.src='./assets/crayon-hearts-soft.webp';
-  });
 }
 
 let starsPromise;
 export function loadCrayonStars(){
-  return starsPromise??=new Promise((resolve,reject)=>{
-    const atlas=new Image();
-    atlas.onload=()=>resolve(Array.from({length:4},(_,i)=>{
+  return starsPromise??=artwork.get('./assets/crayon-stars.webp').ready.then(atlas=>Array.from({length:4},(_,i)=>{
       const canvas=document.createElement('canvas');canvas.width=canvas.height=160;
       const cellW=atlas.width/2,cellH=atlas.height/2;
       canvas.getContext('2d').drawImage(atlas,(i%2)*cellW,Math.floor(i/2)*cellH,cellW,cellH,0,0,160,160);
       return layerPigment(canvas,'#b57b42',.32);
     }));
-    atlas.onerror=()=>reject(new Error('蜡笔星星加载失败'));
-    atlas.src='./assets/crayon-stars.webp';
-  });
 }

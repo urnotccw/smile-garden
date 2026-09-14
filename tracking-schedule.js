@@ -26,6 +26,7 @@ export function faceResultFreshness(capturedAt, now) {
 export function cameraStatus(state) {
   if (state.busy) return '等待摄像头授权';
   if (!state.stream) return '未开启';
+  if (state.videoStalled) return state.videoRecovering?'画面暂停 · 正在恢复':'画面暂停 · 请恢复摄像头';
   if (state.trackingError) return '识别需重试';
   if (!state.trackingReady) return state.startupProgress ? startupText(state.startupProgress) : '正在准备识别…';
   if (state.trackingDelayed) return '识别稍慢 · 正在恢复';

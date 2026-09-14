@@ -8,9 +8,12 @@ import { sampleSize, RuntimeMetrics } from './runtime.js';
 import { TrackingSchedule, cameraStatus, faceResultFreshness, TRACKING_TIMEOUT_MS } from './tracking-schedule.js';
 import { LiveComposition } from './live-composition.js';
 import { LayerActivity } from './layer-activity.js';
+import {artwork} from './artwork.js';
+import {VideoHealth} from './video-health.js';
 import {prepareVision,downloadBytes,boundedInitialization} from './tracker-resources.js';
 const schedule = new TrackingSchedule(), composition = new LiveComposition();
 const layers = new LayerActivity();
+const videoHealth = new VideoHealth();
 const metrics=new RuntimeMetrics(), debug=new URLSearchParams(location.search).has('debug');
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const $ = (id) => document.getElementById(id),
@@ -63,6 +66,10 @@ const state = {
   frames: 0,
   fpsTime: 0,
   frameRate: 0,
+  videoStalled: false,
+  videoRecoveryAttempted: false,
+  videoRecovering: false,
+  cameraFailure: '',
 };
 let worker = null,
   beginMainHands = null,
@@ -82,6 +89,47 @@ function message(text, error = false) {
   $("message").textContent = error ? text : "";
   $("message").classList.toggle("error", error);
 }
+function previewStatus() {
+  const assets=artwork.status();
+  let text='',action='';
+  if(state.busy)text='等待摄像头授权…';
+  else if(state.stream){
+    if(state.videoStalled){text=state.videoRecovering?'画面暂停，正在恢复…':'画面暂停，请恢复摄像头';action='video';}
+    else if(state.trackingError){text='识别暂不可用，请重试';action='tracker';}
+    else if(!state.trackingReady||!state.firstInference)text=cameraStatus(state);
+    else if(!state.face)text=cameraStatus(state);
+    else if(state.handLoading)text='表情就绪，手势准备中…';
+  }else if(state.cameraFailure){text=state.cameraFailure;action='camera';}
+  if(!action&&(assets.failed||assets.retrying)){
+    text=assets.failed?'部分绘画素材未加载，点此重试':'正在重新加载绘画素材…';
+    if(assets.failed)action='artwork';
+  }else if(!text&&assets.loading)text='正在加载绘画素材…';
+  const signature=JSON.stringify([text,action,state.videoRecovering]);
+  if(previewStatus.signature===signature)return;
+  previewStatus.signature=signature;
+  setText('previewStatusText',text);
+  $('previewStatus').hidden=!text;
+  const button=$('previewRetry');button.hidden=!action;button.dataset.action=action;
+  button.disabled=state.videoRecovering;
+  setText('previewRetry',action==='video'?'恢复画面':'重试');
+}
+async function resumeVideo() {
+  if(!state.stream||state.busy||state.videoRecovering||document.hidden)return;
+  state.videoRecoveryAttempted=true;state.videoRecovering=true;
+  const epoch=state.epoch;let timer;
+  try {await Promise.race([video.play(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('play timeout')),4000);})]);}
+  catch { /* Keep the visible recovery action; do not loop permission requests. */ }
+  finally {clearTimeout(timer);if(epoch===state.epoch)state.videoRecovering=false;}
+}
+artwork.subscribe(()=>previewStatus());
+$('previewRetry').onclick=()=>{
+  const action=$('previewRetry').dataset.action;
+  if(action==='artwork')artwork.retry();
+  else if(action==='video'||action==='tracker'||action==='camera'){
+    const device=state.stream?.getVideoTracks()[0]?.getSettings().deviceId;
+    void startCamera(device);
+  }
+};
 function cameraButtons() {
   const active = !!state.stream,
     busy = state.busy;
@@ -142,7 +190,7 @@ function resetInteraction() {
 }
 function handsReady(ready) {
   state.handLoading=false;state.handReady=ready;
-  metrics.markStartup('handReady');
+  metrics.markStartup(ready?'handReady':'handFailed');
   setText('cameraTag', cameraStatus(state));
   if(state.stream)message(ready?'微笑下雨 · 张嘴大笑放烟花。托起一只手，接住爱心和雨滴。':'表情特效已就绪；手势暂不可用，可用鼠标或触屏拨动花草。关闭并重新开启摄像头可重试。',!ready);
 }
@@ -286,7 +334,7 @@ function trackingFailed(reason) {
 function cameraError(e) {
   const texts = {
     NotAllowedError:
-      "摄像头权限被拒绝。请在浏览器地址栏的网站权限中允许摄像头，然后重新开启；手机请在 Safari 或 Chrome 中打开。",
+      "摄像头权限被拒绝。请在网站或系统权限设置中允许摄像头，然后重新开启。",
     PermissionDeniedError: "请在浏览器网站权限中允许摄像头，再重新开启。",
     NotFoundError: "没有找到摄像头。请连接摄像头，或检查系统是否禁用了设备。",
     DevicesNotFoundError: "没有找到摄像头，请连接设备后重试。",
@@ -300,6 +348,8 @@ function cameraError(e) {
   return texts[e.name] || `无法开启摄像头：${e.message || e.name}。请刷新页面重试。`;
 }
 function stopCamera() {
+  state.videoStalled=false;state.videoRecoveryAttempted=false;state.videoRecovering=false;
+  state.cameraFailure='';videoHealth.reset(performance.now());
   resetInteraction();
   if(state.trackingReady&&!state.handReady&&!state.handLoading){
     worker?.terminate();worker=null;mainDetector?.close();mainHandDetector?.close();
@@ -331,6 +381,7 @@ async function startCamera(deviceId) {
     return;
   }
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    state.cameraFailure='当前页面无法使用摄像头，请使用公开 HTTPS 链接';
     message(
       "当前地址不能调用摄像头。电脑请用 http://localhost:4173；手机请用可信 HTTPS 地址打开。不要直接打开 HTML 文件或使用局域网 HTTP 地址。",
       true,
@@ -338,6 +389,7 @@ async function startCamera(deviceId) {
     return;
   }
   stopCamera();
+  artwork.retry();
   state.busy = true;
   state.trackingError = false;
   metrics.beginCamera();
@@ -373,15 +425,17 @@ async function startCamera(deviceId) {
     }
     state.stream = acquired;
     video.srcObject = acquired;
-    await video.play();
+    await boundedInitialization(video.play(),8000);
     if (epoch !== state.epoch) return;
     acquired.getVideoTracks()[0].addEventListener("ended", () => {
       if (state.stream === acquired) {
         stopCamera();
+        state.cameraFailure='摄像头已断开，请重新连接';
         message("摄像头连接已断开，请重新连接并开启。", true);
       }
     });
     state.busy = false;
+    videoHealth.reset(performance.now());
     metrics.markStartup('cameraReady');
     applyMirror();
     cameraButtons();
@@ -404,6 +458,10 @@ async function startCamera(deviceId) {
     if (!state.stream) {
       acquired?.getTracks().forEach((t) => t.stop());
       message(cameraError(e), true);
+      state.cameraFailure=e.name==='NotAllowedError'?'摄像头权限未开启，请允许后重试':'摄像头未连接，请重试';
+    } else if(video.paused||video.readyState<2) {
+      state.videoStalled=true;
+      message('摄像头画面未播放，请点击恢复画面重试。',true);
     } else {
       state.trackingError = true;
       message(
@@ -703,6 +761,9 @@ stage.addEventListener("pointerdown", () => {
   }
 });
 document.addEventListener("visibilitychange", () => {
+  state.epoch++;state.inFlight=false;clearTimeout(watchdog);
+  state.videoRecovering=false;state.videoRecoveryAttempted=false;
+  videoHealth.reset(performance.now());
   resetInteraction();
   laugh.reset();
   fireworks.resetTracking();
@@ -750,9 +811,21 @@ function loop(time) {
     scene.setQuality(fireworks.renderQuality.level);
     if (state.stream?.getVideoTracks()[0]?.readyState === "ended") {
       stopCamera();
+      state.cameraFailure='摄像头已断开，请重新连接';
       message("摄像头连接已断开，请重新开启。", true);
     }
-    trackFrame(time);
+    if(state.stream&&!state.busy){
+      const stalled=videoHealth.stalled(video,time,state.stream.getVideoTracks()[0]?.muted);
+      if(stalled&&!state.videoStalled){
+        state.epoch++;state.inFlight=false;clearTimeout(watchdog);resetInteraction();
+      }
+      state.videoStalled=stalled;
+      if(stalled&&!state.videoRecoveryAttempted)void resumeVideo();
+      if(!stalled)state.videoRecoveryAttempted=false;
+    }
+    if(!state.videoStalled)trackFrame(time);
+    setText('cameraTag',cameraStatus(state));
+    previewStatus();
     if ((state.face || laugh.active) && time - state.lastResult > TRACKING_TIMEOUT_MS) {
       gate.reset();laugh.reset();state.lastRaw=0;
       state.trackingDelayed = true;
@@ -874,6 +947,8 @@ window.gardenDiagnostics = () => ({
   handReady: state.handReady,
   cameraStatus: cameraStatus(state),
   qualityLevel: fireworks.renderQuality.level,
+  videoStalled: state.videoStalled,
+  artwork: artwork.status(),
   modelResources: worker ? state.modelResources || [] : performance.getEntriesByType('resource')
     .filter(r=>r.name.includes('/vendor/')).map(r=>({file:r.name.split('/').pop(),transferSize:r.transferSize,encodedBodySize:r.encodedBodySize})),
   actualCameraSettings: (()=>{
@@ -881,7 +956,3 @@ window.gardenDiagnostics = () => ({
     return s ? {width:s.width,height:s.height,frameRate:s.frameRate,aspectRatio:s.aspectRatio,facingMode:s.facingMode} : null;
   })(),
 });
-setTimeout(() => {
-  if (scene.assetError)
-    message("植物素材未能加载，请检查 assets 文件夹中的植物图片 文件是否完整。", true);
-}, 4000);

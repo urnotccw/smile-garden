@@ -1,3 +1,4 @@
+import {artwork} from './artwork.js';
 import { clamp } from "./smile.js";
 import { sweptInfluence, stepSway } from "./plant-motion.js";
 import { GardenLifetime } from "./garden-lifetime.js";
@@ -41,14 +42,8 @@ export class GardenScene {
       });
     this.w = 1;
     this.h = 1;
-    this.atlas = new Image();
-    this.atlas.src = "./assets/plants-crayon.webp";
-    this.atlas.onerror = () => {
-      this.assetError = true;
-    };
-    this.extraAtlas = new Image();
-    this.extraAtlas.src = "./assets/plants-crayon-extra.webp";
-    this.extraAtlas.onerror = this.atlas.onerror;
+    this.atlas = artwork.get('./assets/plants-crayon.webp').image;
+    this.extraAtlas = artwork.get('./assets/plants-crayon-extra.webp').image;
     this.rects = [
       [42, 143, 335, 269],
       [450, 65, 262, 348],

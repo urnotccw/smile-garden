@@ -15,6 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
@@ -22,6 +23,16 @@ jobs:
           node-version: '22'
       - name: Test interaction rules
         run: node --test tests/*.test.mjs
+      - name: Install browser test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Check recovery and effect rendering
+        run: |
+          node tests/browser/release-recovery.mjs
+          node tests/browser/render-budget.mjs
+          node tests/browser/tracking-response.mjs
+          node tests/browser/startup-recovery.mjs
       - name: Build static site
         run: node build.mjs
       - uses: actions/configure-pages@v5

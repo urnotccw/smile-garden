@@ -694,6 +694,10 @@ select {
 .phone-live-ui, .phone-hardware { display: none; }
 .format-options { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
 .format-options label { position: relative; cursor: pointer; }
+.preview-status { position:absolute; z-index:12; left:6%; right:6%; top:18%; display:flex; align-items:center; justify-content:center; gap:8px; padding:8px 12px; background:#193c35; color:#f4f5e8; border-radius:8px; font-size:12px; line-height:1.6; text-align:center; }
+.preview-status[hidden], .preview-status button[hidden] { display:none; }
+.preview-status button { flex-shrink:0; min-height:44px; padding:8px 12px; border:1px solid #dce8ac; border-radius:5px; background:#e4edb5; color:#183b32; font:inherit; cursor:pointer; }
+.preview-status button:focus-visible { outline:3px solid white; outline-offset:2px; }
 .format-options input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .format-options span { display: grid; place-items: center; min-height: 44px; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; }
 .format-options input:checked + span { background: #293e36; color: #f8faf5; border-color: #293e36; }
