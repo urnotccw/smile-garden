@@ -274,7 +274,7 @@ export class GardenScene {
       });
     }
   }
-  waterSeed(x, y) {
+  waterSeed(x, y, outgoing = null) {
     if (!this.grow) return;
     // The first watered flower can emerge as soon as the ground is visible;
     // the remaining green wash continues to build behind it.
@@ -284,13 +284,15 @@ export class GardenScene {
       return;
     }
     x = clamp(x, 0.045, 0.955);
-    const nearest = !this.phonePreview && this.plants.find((p) => Math.abs(p.x - x) * this.w < (this.w < 500 ? 27 : 35));
+    const occupied = outgoing ? this.plants.filter(p => p !== outgoing) : this.plants;
+    const nearest = !this.phonePreview && occupied.find((p) => Math.abs(p.x - x) * this.w < (this.w < 500 ? 24 : 30));
     if (nearest) {
       nearest.target = Math.min(1.08, nearest.target + 0.12);
       nearest.watered = this.time;
       return;
     }
-    const limit = this.phonePreview ? 10 : Math.min(36, Math.max(12, Math.floor(this.w / 32)));
+    // One extra slot is reserved for an outgoing/incoming crossfade pair.
+    const limit = (this.phonePreview ? 12 : Math.min(42, Math.max(14, Math.floor(this.w / 28)))) + (outgoing ? 1 : 0);
     if (this.plants.length >= limit) {
       if (this.phonePreview) {
         const watered = this.plants.reduce((a,b) => Math.abs(a.x-x)<Math.abs(b.x-x)?a:b);
@@ -308,7 +310,16 @@ export class GardenScene {
       type=[0,8,1,9,2,6][(this.nextPlant-1)%6];
     let height = rnd(...this.heightRanges[type]) * 0.88, depth;
     if (this.phonePreview) {
-      const placement = this.phonePlantPlacement(type, x);
+      let placement = this.phonePlantPlacement(type, x, occupied);
+      if (!placement && outgoing) {
+        // If every other space is occupied, reuse the old root with a smaller
+        // silhouette. Its neighbours remain clear even with a different species.
+        const candidate = {x:outgoing.x,type,height,depth:this.plantDepth(outgoing)};
+        const oldHeight=this.plantHeight(outgoing),newHeight=this.plantHeight(candidate);
+        const aspect=p=>this.rects[p.type][2]/this.rects[p.type][3];
+        candidate.height *= Math.min(.92,oldHeight/newHeight*.92,oldHeight*aspect(outgoing)/(newHeight*aspect(candidate))*.92);
+        if (occupied.every(p=>Math.abs(p.x-candidate.x)*this.w>=this.plantSpacing(p,candidate))) placement=candidate;
+      }
       if (!placement) {
         for (const p of this.plants) if (Math.abs(p.x-x)<.2) p.watered=this.time;
         return;
@@ -316,7 +327,7 @@ export class GardenScene {
       ({x, type, height, depth} = placement);
     }
     const target = rnd(0.75, 1);
-    this.plants.push({
+    const plant = {
       x: clamp(x, 0.045, 0.955),
       y: Math.max(0.98, y),
       type,
@@ -333,14 +344,16 @@ export class GardenScene {
       bend: 0,
       bendVelocity: 0,
       target,
-      growDuration: this.plants.length === 0 ? rnd(1.45, 1.85) : rnd(2.1, 3.1),
-      growDelay: this.plants.length === 0 ? 0 : rnd(0, 0.18),
+      growDuration: this.plants.length === 0 ? rnd(1.45, 1.85) : outgoing ? rnd(1.65,2.1) : rnd(2.1, 3.1),
+      growDelay: this.plants.length === 0 || outgoing ? 0 : rnd(0, 0.18),
       age: 0,
       seed: rnd(0, 8),
       watered: this.time,
       flip: Math.random() < 0.5 ? -1 : 1,
-    });
+    };
+    this.plants.push(plant);
     this.plants.sort((a, b) => a.opacity - b.opacity || b.height - a.height);
+    return plant;
   }
   renewFlowers(dt, active) {
     // Real ground rain must establish the garden first. Then sustained smiles
@@ -350,7 +363,7 @@ export class GardenScene {
       return;
     }
     this.bloomClock = (this.bloomClock || 0) + dt;
-    if (this.bloomClock < 3.2 || this.plants.some(p => p.retiringAge != null)) return;
+    if (this.bloomClock < 2.4 || this.plants.some(p => p.retiringAge != null)) return;
     this.bloomClock = 0;
     // Try the largest horizontal gap; phone placement also balances depth/regions.
     const xs = [.01, ...this.plants.map(p => p.x).sort((a,b) => a-b), .99];
@@ -362,11 +375,18 @@ export class GardenScene {
     this.waterSeed(x, .99);
     if (this.plants.length > count) return;
     // Full or spatially crowded: retire one mature, visible flower at a time.
-    // Watering cannot cancel retirement, and its space remains reserved until
-    // the fade finishes, so a new plant never pops over the outgoing one.
+    // Start the replacement before fading its predecessor. Only this pair may
+    // share space, and failure to place the new flower leaves the old one intact.
     const oldest = this.visiblePlants().filter(p => p.age >= 8)
       .reduce((best,p) => !best || p.age > best.age ? p : best, null);
-    if (oldest) oldest.retiringAge = 0;
+    if (oldest) {
+      const replacement = this.waterSeed(oldest.x, oldest.y, oldest);
+      if (replacement) {
+        oldest.retiringAge = 0;
+        oldest.replacement = replacement;
+        this.visibleCache = null;
+      }
+    }
   }
   plantHeight(p) {
     if(!this.phonePreview)return p.height;
@@ -379,12 +399,12 @@ export class GardenScene {
     if(!this.phonePreview)return p.y;
     return (this.plantDepth(p)===0?.926:.978)+rndStable(p.seed||0,11)*.014;
   }
-  phonePlantPlacement(type, impactX) {
+  phonePlantPlacement(type, impactX, occupied = this.plants) {
     // Rain waters the whole ground. Fill underrepresented regions before
     // adding more flowers beside an already dominant cluster.
     const regions = [0,1].flatMap(depth=>[[.08,.32],[.38,.62],[.68,.92]].map(([lo,hi],index) => ({
       lo,hi,index,depth,
-      weight:this.plants.filter(p => Math.min(2,Math.floor(p.x*3))===index)
+      weight:occupied.filter(p => Math.min(2,Math.floor(p.x*3))===index)
         .reduce((sum,p) => sum + this.plantHeight(p)*Math.max(.7,p.opacity)*(this.plantDepth(p)===depth?3:1),0),
     }))).sort((a,b) => a.weight-b.weight || Math.abs((a.lo+a.hi)/2-impactX)-Math.abs((b.lo+b.hi)/2-impactX));
     for (const small of [false,true]) for (const region of regions) {
@@ -400,7 +420,7 @@ export class GardenScene {
       positions.sort((a,b)=>Math.abs(a-center)-Math.abs(b-center));
       for (const x of positions) {
         const candidate={x,type:kind,height,depth:region.depth};
-        if(this.plants.every(p=>Math.abs(p.x-x)*this.w>=this.plantSpacing(p,candidate)))return candidate;
+        if(occupied.every(p=>Math.abs(p.x-x)*this.w>=this.plantSpacing(p,candidate)))return candidate;
       }
     }
     return null;
@@ -408,7 +428,7 @@ export class GardenScene {
   plantSpacing(a, b) {
     const width = p => this.h * this.plantHeight(p) * this.rects[p.type][2] / this.rects[p.type][3] * 1.08;
     const separated=this.plantDepth(a)!==this.plantDepth(b);
-    return separated ? Math.max(this.w*.055,(width(a)+width(b))*.15) : Math.max(this.w*.11,(width(a)+width(b))*.36);
+    return separated ? Math.max(this.w*.048,(width(a)+width(b))*.13) : Math.max(this.w*.095,(width(a)+width(b))*.33);
   }
   visiblePlants() {
     if (!this.phonePreview) return this.plants;
@@ -418,19 +438,21 @@ export class GardenScene {
     // A desktop garden can already be dense when switching to portrait.
     // Keep its plants intact, but show a spaced selection in the phone frame.
     const visible = [];
+    const standing = this.plants.filter(p=>p.retiringAge == null);
     const fits = p => visible.every(q => Math.abs(p.x-q.x)*this.w >= this.plantSpacing(p,q));
     // Reserve a readable flower in each region before filling smaller gaps.
     // Neither an edge leaf nor two broad flowers should exclude the center.
     for (const zone of [0,2,1]) {
       const target=zone===1?.1:.18, center=(zone+.5)/3;
       const score=p=>Math.abs(this.plantHeight(p)-target)*3+Math.abs(p.x-center);
-      const anchor=this.plants.filter(p=>Math.min(2,Math.floor(p.x*3))===zone)
+      const anchor=standing.filter(p=>Math.min(2,Math.floor(p.x*3))===zone)
         .sort((a,b)=>score(a)-score(b)).find(fits);
       if(anchor)visible.push(anchor);
     }
-    for (const p of [...this.plants].sort((a,b) => this.plantHeight(b)-this.plantHeight(a) || a.x-b.x)) {
-      if (visible.length < 10 && !visible.includes(p) && fits(p)) visible.push(p);
+    for (const p of [...standing].sort((a,b) => this.plantHeight(b)-this.plantHeight(a) || a.x-b.x)) {
+      if (visible.length < 12 && !visible.includes(p) && fits(p)) visible.push(p);
     }
+    for (const p of this.plants) if (p.retiringAge != null && (visible.includes(p.replacement) || fits(p))) visible.push(p);
     const result = visible.sort((a,b) => this.plantRootY(a)-this.plantRootY(b) || a.opacity-b.opacity);
     this.visibleCache = { source: this.plants, count: this.plants.length, w: this.w, h: this.h, result };
     return result;

@@ -90,13 +90,19 @@ test('a ready extra plant atlas can draw while the first atlas is still loading'
 
 for (const phone of [true,false]) test(`sustained smiling renews a bounded garden instead of keeping the first flowers forever (portrait=${phone})`,()=>{
  const s=scene(phone),seen=new Set();let retirements=0;
- const limit=phone?10:36;
+ const limit=phone?13:43;
  for(let i=0;i<3600;i++){
   s.update(.05,true,0,.6);
-  assert.ok(s.plants.length<=limit,'outgoing flowers still count toward the cap');
+  assert.ok(s.plants.length<=limit,'only one extra slot for the crossfade');
   assert.ok(s.plants.filter(p=>p.retiringAge!=null).length<=1,'only one retirement at a time');
   for(const p of s.plants)seen.add(p);
-  if(s.plants.some(p=>p.retiringAge!=null))retirements++;
+  const outgoing=s.plants.find(p=>p.retiringAge!=null);
+  if(outgoing){
+   retirements++;
+   assert.ok(s.plants.includes(outgoing.replacement),'replacement exists throughout the fade');
+   if(phone)assert.ok(s.visiblePlants().includes(outgoing.replacement),'portrait spacing must not hide the new flower');
+   if(outgoing.retiringAge>1)assert.ok(plantGrowth(outgoing.replacement).reveal>.2,'new flower is visibly growing before old one disappears');
+  }
  }
  assert.ok(seen.size>s.plants.length+15,`${seen.size} different flowers appeared with ${s.plants.length} remaining`);
  assert.ok(retirements>0,'crowded garden fades old flowers');
