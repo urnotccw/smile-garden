@@ -10,7 +10,6 @@ import { SPARK_COLORS, PATTERN_PALETTES, makeInkSpark, faceSparkOpacity } from "
 import { FireworkAtmosphere } from "./firework-atmosphere.js";
 import { CrayonWaterGround } from "./water-ground.js";
 import { FireworkRainGate } from "./firework-rain-gate.js";
-import { FireworkLayers } from "./firework-layers.js";
 
 const random = (a, b) => a + Math.random() * (b - a);
 const PATTERN_EXPLODE_AT = 1.05;
@@ -195,7 +194,8 @@ export class Fireworks {
     this.palmTracker = new PalmTracker();
     this.renderQuality = new RenderQuality();
     this.atmosphere = new FireworkAtmosphere(video);
-    this.motifLayers = new FireworkLayers();
+    // The motif is formed by dry-wax sparks, without the retired solid paint fill.
+    this.motifLayers = null;
     this.waterGround = new CrayonWaterGround();
     this.handVortex = null;
     this.starThrows = 0;
@@ -384,7 +384,7 @@ export class Fireworks {
       this.launchLanes.pop();
       this.lastLane = lane;
       const kind = this.nextPattern++ % 4;
-      const sizeScale = [0.245, 0.15, 0.17][this.launched % 3];
+      const sizeScale = [0.282, 0.173, 0.196][this.launched % 3];
       const angle = random(0.18, 0.55) * (Math.random() < 0.5 ? -1 : 1);
       let layout = fitPattern(this.patterns[kind], this.w, this.h, target, angle, sizeScale);
       if (this.rockets.length) {
@@ -476,11 +476,11 @@ export class Fireworks {
         life: falling ? random(6.2, 7.2) : releaseAt + .45,
         radius: formationRadius,
         formationRadius,
-        fallRadius: random(small, large) * (this.w < 500 ? .9 : 1),
+        fallRadius: random(small, large) * 1.2 * (this.w < 500 ? .9 : 1),
         falling,
         color: PATTERN_PALETTES[rocket.kind][q.color],
         ink: (q.ink ?? 1) * random(.88,1),
-        brush: i%4===0 ? i%3 : -1,
+        brush: i%4===0 ? -1 : i%3,
         inkAngle: (q.angle??0)+(rocket.angle||0),
         primary: i%3===0,
         heart: false,
@@ -680,9 +680,7 @@ export class Fireworks {
       c.moveTo(wave.x+Math.cos(3.6)*r,wave.y+Math.sin(3.6)*r);
       c.arc(wave.x, wave.y, r, 3.6, 5.9);
       c.stroke();
-      c.globalAlpha = Math.max(0, 1 - wave.age / 0.16) * 0.65;
-      const size = wave.radius * 0.8;
-      c.drawImage(this.sprites[0], wave.x - size / 2, wave.y - size / 2, size, size);
+      // Keep the flash airy: an enlarged pigment stamp reads as a solid paint blob.
     }
     for (const r of this.rockets) {
       if (r.age < 0) continue;
@@ -707,6 +705,8 @@ export class Fireworks {
         const trail = 0.035 * (1 - clamp((p.age - (p.releaseAt ?? PATTERN_EXPLODE_AT)) / 0.5));
         if (trail <= 0) continue;
         c.moveTo(p.x - p.vx * trail, p.y - p.vy * trail);
+        c.lineTo(p.x - p.vx * trail * .42, p.y - p.vy * trail * .42);
+        c.moveTo(p.x - p.vx * trail * .29, p.y - p.vy * trail * .29);
         c.lineTo(p.x, p.y);
       }
       c.stroke();
