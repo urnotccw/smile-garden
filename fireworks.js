@@ -384,7 +384,7 @@ export class Fireworks {
       this.launchLanes.pop();
       this.lastLane = lane;
       const kind = this.nextPattern++ % 4;
-      const sizeScale = [0.245, 0.13, 0.17][this.launched % 3];
+      const sizeScale = [0.245, 0.15, 0.17][this.launched % 3];
       const angle = random(0.18, 0.55) * (Math.random() < 0.5 ? -1 : 1);
       let layout = fitPattern(this.patterns[kind], this.w, this.h, target, angle, sizeScale);
       if (this.rockets.length) {
